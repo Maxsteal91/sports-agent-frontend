@@ -33,6 +33,7 @@ export default function RootLayout({ children }) {
               { href: '/', label: 'Dashboard' },
               { href: '/confronto', label: 'Confronto' },
               { href: '/chat', label: 'AI Chat' },
+              { href: '/upload', label: 'Upload' },
             ].map(({ href, label }) => (
               <Link key={href} href={href} style={{
                 fontFamily: 'var(--font-display)',
