@@ -4,8 +4,9 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 export default function EventiChart({ data }) {
   const formatted = data.map(d => ({
     ...d,
-    label: d.awayTeam === 'Sangiovannese 1927' || d.homeTeam === 'Sangiovannese 1927'
-      ? (d.homeTeam === 'Sangiovannese 1927' ? `vs ${d.awayTeam}` : `vs ${d.homeTeam}`)
+    // Supporta sia v1 (homeTeam/awayTeam) che v2 (home_team/away_team)
+    label: d.match_name
+      ? d.match_name.charAt(0).toUpperCase() + d.match_name.slice(1)
       : d.match_name
   }))
 
