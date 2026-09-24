@@ -213,7 +213,9 @@ export default function PartitaPage() {
 
   // Tenant: priorità all'utente loggato, fallback alla URL
   const urlTenant = searchParams.get('tenant') || 'mazzola'
-  const user      = getUser()
+  const [user,      setUser]      = useState(null)
+  const [userReady, setUserReady] = useState(false)
+  useEffect(() => { setUser(getUser()); setUserReady(true) }, [])
   const tenant    = (user?.role !== 'admin' && user?.tenant) ? user.tenant : urlTenant
 
   const [partita,   setPartita]   = useState(null)
@@ -223,7 +225,7 @@ export default function PartitaPage() {
   const [tab,       setTab]       = useState('sintesi')
 
   useEffect(() => {
-    if (!match_name) return
+    if (!match_name || !userReady) return
     Promise.all([
       fetchAPI(`/v2/analytics/${tenant}/report/${match_name}`),
       fetchAPI(`/v2/analytics/${tenant}/mappa/${match_name}?event_type=shot`),
@@ -233,7 +235,7 @@ export default function PartitaPage() {
       setMappaTiri(mappa.data || [])
       setLoading(false)
     }).catch(err => { console.error(err); setLoading(false) })
-  }, [match_name, tenant])
+  }, [match_name, tenant, userReady])
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
