@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { loginAPI } from '../../lib/api'
 import { saveAuth } from '../../lib/auth'
@@ -12,13 +12,11 @@ export default function LoginPage() {
   const [loading,  setLoading]  = useState(false)
 
   // Mostra messaggio se sessione scaduta
-  useState(() => {
-    if (typeof window !== 'undefined') {
-      const msg = sessionStorage.getItem('auth_message')
-      if (msg) {
-        setError(msg)
-        sessionStorage.removeItem('auth_message')
-      }
+  useEffect(() => {
+    const msg = sessionStorage.getItem('auth_message')
+    if (msg) {
+      setError(msg)
+      sessionStorage.removeItem('auth_message')
     }
   }, [])
 
