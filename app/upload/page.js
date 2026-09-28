@@ -3,7 +3,6 @@ import { useState, useRef, useEffect } from 'react'
 import { getUser } from '../../lib/auth'
 import { getToken } from '../../lib/auth'
 
-const ALL_TENANTS = ['mazzola', 'sangiovannese']
 const CATEGORIES = ['prima', 'u21', 'u19', 'u17', 'u16', 'u15']
 
 export default function UploadPage() {
@@ -20,12 +19,31 @@ export default function UploadPage() {
   const [loadingPartite, setLoadingPartite] = useState(false)
   const [deletingMatch,  setDeletingMatch]  = useState(null)
   const [user, setUser] = useState(null)
+  const [allTenants, setAllTenants] = useState([])
   const fileInputRef = useRef(null)
 
   useEffect(() => {
     const u = getUser()
     setUser(u)
     if (u?.tenant) setTenant(u.tenant)
+  }, [])
+
+  // Carica lista tenant dal backend
+  useEffect(() => {
+    const fetchTenants = async () => {
+      try {
+        const token = getToken()
+        const res = await fetch('/api/upload/v2/tenants', {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        })
+        if (!res.ok) throw new Error()
+        const data = await res.json()
+        setAllTenants(data.tenants || [])
+      } catch {
+        setAllTenants(['mazzola', 'sangiovannese'])
+      }
+    }
+    fetchTenants()
   }, [])
 
   // Carica lista partite per tenant selezionato
@@ -202,7 +220,7 @@ export default function UploadPage() {
                 onFocus={e => e.target.style.borderColor = 'var(--primary)'}
                 onBlur={e => e.target.style.borderColor = 'var(--border)'}
               >
-                {ALL_TENANTS.map(t => (
+                {allTenants.map(t => (
                   <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
                 ))}
               </select>
