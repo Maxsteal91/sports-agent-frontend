@@ -4,8 +4,6 @@ import { fetchAPI } from '../../lib/api'
 import { getUser } from '../../lib/auth'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
-const ALL_TENANTS = ['mazzola', 'sangiovannese']
-
 const EVENTI_DISPONIBILI = [
   'shot', 'passaggi', 'dribbling', 'duelli', 'occasioni goal',
   'corner', 'cross', 'palle recuperate', 'disciplina', 'lanci'
@@ -28,20 +26,40 @@ const BAR_COLORS = {
 }
 
 export default function ConfrontoPage() {
-  const [user,    setUser]    = useState(null)
-  const [tenant,  setTenant]  = useState('mazzola')
-  const [evento,  setEvento]  = useState('shot')
-  const [data,    setData]    = useState([])
-  const [partite, setPartite] = useState([])
-  const [loading, setLoading] = useState(false)
+  const [user,                 setUser]                 = useState(null)
+  const [tenant,               setTenant]               = useState('')
+  const [allTenants,           setAllTenants]           = useState([])
+  const [categoria,            setCategoria]            = useState(null)
+  const [evento,               setEvento]               = useState('shot')
+  const [data,                 setData]                 = useState([])
+  const [partite,              setPartite]              = useState([])
+  const [loading,              setLoading]              = useState(false)
 
   useEffect(() => {
     const u = getUser()
     setUser(u)
     if (u?.tenant) setTenant(u.tenant)
+    if (u?.role === 'manager' && u?.categoria) setCategoria(u.categoria)
+  }, [])
+
+  // Carica lista tenant — solo admin
+  useEffect(() => {
+    const u = getUser()
+    if (u?.role !== 'admin') return
+    fetchAPI('/upload/v2/tenants')
+      .then(data => {
+        const ts = data.tenants || []
+        setAllTenants(ts)
+        if (!u?.tenant && ts.length > 0) setTenant(ts[0])
+      })
+      .catch(() => {
+        setAllTenants(['mazzola', 'sangiovannese'])
+        if (!u?.tenant) setTenant('mazzola')
+      })
   }, [])
 
   useEffect(() => {
+    if (!tenant) return
     fetchAPI(`/upload/v2/partite?tenant=${tenant}`)
       .then(res => setPartite(res.data || []))
       .catch(() => setPartite([]))
@@ -54,8 +72,14 @@ export default function ConfrontoPage() {
       .catch(err => { console.error(err); setLoading(false) })
   }, [tenant, evento])
 
-  // Team del tenant
-  const tenantTeam = tenant === 'mazzola' ? 'mazzola' : 'san giovannese 1927'
+  // Team del tenant — derivato dalla prima partita
+  const tenantTeam = partite[0]?.home_team || tenant
+
+  // Categorie disponibili e filtraggio
+  const categorieDisponibili = [...new Set(partite.map(p => p.category).filter(Boolean))].sort()
+  const partiteFiltrate = categoria ? partite.filter(p => p.category === categoria) : partite
+  const matchNamesFiltrati = new Set(partiteFiltrate.map(p => p.match_name))
+  const dataFiltrati = categoria ? data.filter(d => matchNamesFiltrati.has(d.match_name)) : data
   const BAR_LABELS = getBarLabels(evento.charAt(0).toUpperCase() + evento.slice(1))
 
   // Mappa match_name → label e squadre
@@ -72,13 +96,13 @@ export default function ConfrontoPage() {
     }
   })
 
-  const hasTeam  = data.some(d => d.team)
+  const hasTeam  = dataFiltrati.some(d => d.team)
   const useExtra = !hasTeam
-  const partiteUniche = [...new Set(data.map(d => d.match_name))]
+  const partiteUniche = [...new Set(dataFiltrati.map(d => d.match_name))]
 
   const chartData = partiteUniche.map(mn => {
     const info   = partiteMap[mn] || { label: mn }
-    const rows   = data.filter(d => d.match_name === mn)
+    const rows   = dataFiltrati.filter(d => d.match_name === mn)
     const label  = info.label || mn
 
     if (useExtra) {
@@ -129,20 +153,44 @@ export default function ConfrontoPage() {
             Confronta un tipo di evento tra tutte le partite
           </p>
         </div>
-        {user?.role === 'admin' && (
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            {ALL_TENANTS.map(t => (
-              <button key={t} onClick={() => setTenant(t)} style={{
-                padding: '0.5rem 1.2rem', borderRadius: '8px',
-                border: `1px solid ${tenant === t ? 'var(--primary)' : 'var(--border)'}`,
-                background: tenant === t ? 'rgba(0,229,255,0.1)' : 'transparent',
-                color: tenant === t ? 'var(--primary)' : 'var(--text-muted)',
-                cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '0.85rem',
-                fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', transition: 'all 0.2s',
-              }}>{t}</button>
-            ))}
-          </div>
-        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
+          {user?.role === 'admin' && (
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {allTenants.map(t => (
+                <button key={t} onClick={() => { setTenant(t); setCategoria(null) }} style={{
+                  padding: '0.5rem 1.2rem', borderRadius: '8px',
+                  border: `1px solid ${tenant === t ? 'var(--primary)' : 'var(--border)'}`,
+                  background: tenant === t ? 'rgba(0,229,255,0.1)' : 'transparent',
+                  color: tenant === t ? 'var(--primary)' : 'var(--text-muted)',
+                  cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '0.85rem',
+                  fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', transition: 'all 0.2s',
+                }}>{t}</button>
+              ))}
+            </div>
+          )}
+          {user?.role !== 'viewer' && categorieDisponibili.length > 1 && (
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <button onClick={() => setCategoria(null)} style={{
+                padding: '0.3rem 0.9rem', borderRadius: '6px',
+                border: `1px solid ${!categoria ? 'var(--accent)' : 'var(--border)'}`,
+                background: !categoria ? 'rgba(139,92,246,0.12)' : 'transparent',
+                color: !categoria ? 'var(--accent)' : 'var(--text-muted)',
+                cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600,
+                letterSpacing: '0.06em', textTransform: 'uppercase', transition: 'all 0.2s',
+              }}>TUTTE</button>
+              {categorieDisponibili.map(c => (
+                <button key={c} onClick={() => setCategoria(c)} style={{
+                  padding: '0.3rem 0.9rem', borderRadius: '6px',
+                  border: `1px solid ${categoria === c ? 'var(--accent)' : 'var(--border)'}`,
+                  background: categoria === c ? 'rgba(139,92,246,0.12)' : 'transparent',
+                  color: categoria === c ? 'var(--accent)' : 'var(--text-muted)',
+                  cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600,
+                  letterSpacing: '0.06em', textTransform: 'uppercase', transition: 'all 0.2s',
+                }}>{c}</button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Selettore evento */}
