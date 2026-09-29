@@ -392,9 +392,18 @@ export default function PartitaPage() {
       const ts = tipi.tipi || []
       setTipiCoordinate(ts)
       if (ts.length > 0) setMappaEventType(ts.includes('shot') ? 'shot' : ts[0])
+      // Se /tipi non disponibile, mappaEventType verrà impostato sotto da tipiEffettivi
       setLoading(false)
     }).catch(err => { console.error(err); setLoading(false) })
   }, [match_name, tenant, userReady])
+
+  // Inizializza mappaEventType dal fallback quando /tipi non è disponibile
+  useEffect(() => {
+    if (mappaEventType) return // già impostato da /tipi
+    const fallback = aggregati.filter(a => a.totale > 0).map(a => a.event_type)
+      .find(et => ['shot','cross','corner','gkout','freekick'].includes(et))
+    if (fallback) setMappaEventType(fallback)
+  }, [aggregati])
 
   // Carica dati mappa quando cambia event type
   useEffect(() => {
@@ -419,10 +428,17 @@ export default function PartitaPage() {
   const teamB = partita.away_team || ''
   // Mostra solo le tab con dati effettivi negli aggregati
   const eventiPresenti = new Set(aggregati.filter(a => a.totale > 0).map(a => a.event_type))
+
+  // Fallback mappa: se /tipi non è ancora disponibile, usa gli event type dagli aggregati
+  const tipiEffettivi = tipiCoordinate.length > 0
+    ? tipiCoordinate
+    : [...eventiPresenti].filter(et => ['shot','cross','corner','gkout','freekick'].includes(et))
+  const hasMappaData = tipiEffettivi.length > 0
+
   const TABS = [
     'sintesi',
     ...(eventiPresenti.has('shot')                                  ? ['tiri']          : []),
-    ...(tipiCoordinate.length > 0                                   ? ['mappa campo']   : []),
+    ...(hasMappaData                                                 ? ['mappa campo']   : []),
     ...(eventiPresenti.has('passaggi')                              ? ['passaggi']      : []),
     ...(eventiPresenti.has('cross') || eventiPresenti.has('lanci')  ? ['cross & lanci'] : []),
     ...(eventiPresenti.has('duelli') || eventiPresenti.has('dribbling') || eventiPresenti.has('palle recuperate') ? ['duelli'] : []),
@@ -549,13 +565,13 @@ export default function PartitaPage() {
       {/* ── TAB: MAPPA CAMPO ── */}
       {tab === 'mappa campo' && (
         <Section title="Mappa Campo">
-          {tipiCoordinate.length === 0 ? (
+          {tipiEffettivi.length === 0 ? (
             <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nessuna coordinata disponibile per questa partita.</div>
           ) : (
             <>
               {/* Selettore event type */}
               <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-                {tipiCoordinate.map(et => (
+                {tipiEffettivi.map(et => (
                   <button key={et} onClick={() => setMappaEventType(et)} style={{
                     padding: '0.35rem 0.9rem', borderRadius: 6,
                     border: `1px solid ${mappaEventType === et ? 'var(--primary)' : 'var(--border)'}`,
