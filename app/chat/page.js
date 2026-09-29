@@ -487,6 +487,7 @@ export default function ChatPage() {
   const [user,       setUser]       = useState(null);
   const [tenant,     setTenant]     = useState('');
   const [allTenants, setAllTenants] = useState([]);
+  const [categoria,  setCategoria]  = useState(null);
   const [matchName,  setMatchName]  = useState('');
   const [partite,    setPartite]    = useState([]);
 
@@ -497,6 +498,7 @@ export default function ChatPage() {
     const u = getUser();
     setUser(u);
     if (u?.tenant) setTenant(u.tenant);
+    if (u?.role === 'manager' && u?.categoria) setCategoria(u.categoria);
   }, []);
 
   // Carica lista tenant dall'API — solo admin
@@ -517,16 +519,21 @@ export default function ChatPage() {
 
   // Carica lista partite quando cambia tenant
   useEffect(() => {
+    if (!tenant) return;
     fetchAPI(`/upload/v2/partite?tenant=${tenant}`)
       .then(res => setPartite(res.data || []))
       .catch(() => setPartite([]));
     setMatchName('');
+    setCategoria(u => (getUser()?.role === 'manager' ? u : null));
     setSessionId(null);
   }, [tenant]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const categorieDisponibili = [...new Set(partite.map(p => p.category).filter(Boolean))].sort();
+  const partiteFiltrate = categoria ? partite.filter(p => p.category === categoria) : partite;
 
   const suggestions = tenant === 'mazzola' ? SUGGESTIONS_MAZZOLA : SUGGESTIONS_SANGIOVANNESE;
 
@@ -642,6 +649,24 @@ export default function ChatPage() {
           </span>
         )}
 
+        {/* Selettore Categoria — admin e manager con più categorie */}
+        {user?.role !== 'viewer' && categorieDisponibili.length > 1 && (
+          <select
+            value={categoria || ''}
+            onChange={e => { setCategoria(e.target.value || null); setMatchName(''); }}
+            style={{
+              background: T.bgInput, border: `1px solid ${categoria ? '#8B5CF6' : T.border}`,
+              borderRadius: 6, padding: '4px 10px', fontSize: 12,
+              color: categoria ? '#A78BFA' : T.textMuted, cursor: 'pointer',
+            }}
+          >
+            <option value="">Tutte le categorie</option>
+            {categorieDisponibili.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        )}
+
         {/* Selettore Partita */}
         <select
           value={matchName}
@@ -654,7 +679,7 @@ export default function ChatPage() {
           }}
         >
           <option value="">Tutte le partite</option>
-          {partite.map(p => (
+          {partiteFiltrate.map(p => (
             <option key={p.match_name} value={p.match_name}>
               {p.away_team || p.match_name}
             </option>
