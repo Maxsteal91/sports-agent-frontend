@@ -4,11 +4,6 @@ import { fetchAPI } from '../../lib/api'
 import { getUser } from '../../lib/auth'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
-const EVENTI_DISPONIBILI = [
-  'shot', 'passaggi', 'dribbling', 'duelli', 'occasioni goal',
-  'corner', 'cross', 'palle recuperate', 'disciplina', 'lanci'
-]
-
 // Etichetta leggibile per le barre
 // BAR_LABELS viene costruito dinamicamente in base all'evento selezionato
 const getBarLabels = (evento) => ({
@@ -31,6 +26,7 @@ export default function ConfrontoPage() {
   const [allTenants,           setAllTenants]           = useState([])
   const [categoria,            setCategoria]            = useState(null)
   const [evento,               setEvento]               = useState('shot')
+  const [eventiDisponibili,    setEventiDisponibili]    = useState([])
   const [data,                 setData]                 = useState([])
   const [partite,              setPartite]              = useState([])
   const [loading,              setLoading]              = useState(false)
@@ -65,7 +61,24 @@ export default function ConfrontoPage() {
       .catch(() => setPartite([]))
   }, [tenant])
 
+  // Scopri i tipi di evento disponibili per questo tenant
   useEffect(() => {
+    if (!tenant) return
+    fetchAPI(`/v2/analytics/${tenant}/aggregati?period=Totale`)
+      .then(res => {
+        const tipi = [...new Set((res.data || [])
+          .filter(r => r.totale > 0)
+          .map(r => r.event_type)
+        )].sort()
+        setEventiDisponibili(tipi)
+        // Se l'evento corrente non è disponibile, seleziona il primo
+        if (tipi.length > 0 && !tipi.includes(evento)) setEvento(tipi[0])
+      })
+      .catch(() => setEventiDisponibili([]))
+  }, [tenant])
+
+  useEffect(() => {
+    if (!tenant || !evento) return
     setLoading(true)
     fetchAPI(`/v2/analytics/${tenant}/aggregati?event_type=${encodeURIComponent(evento)}&period=Totale`)
       .then(res => { setData(res.data || []); setLoading(false) })
@@ -193,21 +206,25 @@ export default function ConfrontoPage() {
         </div>
       </div>
 
-      {/* Selettore evento */}
+      {/* Selettore evento — solo tipi con dati reali */}
       <div style={{ marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {EVENTI_DISPONIBILI.map(e => (
-            <button key={e} onClick={() => setEvento(e)} style={{
-              padding: '0.5rem 1rem', borderRadius: '8px',
-              border: `1px solid ${evento === e ? 'var(--primary)' : 'var(--border)'}`,
-              background: evento === e ? 'rgba(0,229,255,0.1)' : 'var(--bg-card)',
-              color: evento === e ? 'var(--primary)' : 'var(--text-muted)',
-              cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '0.9rem',
-              fontWeight: 600, letterSpacing: '0.03em', transition: 'all 0.2s',
-              textTransform: 'capitalize',
-            }}>{e}</button>
-          ))}
-        </div>
+        {eventiDisponibili.length === 0 ? (
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Caricamento eventi...</div>
+        ) : (
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {eventiDisponibili.map(e => (
+              <button key={e} onClick={() => setEvento(e)} style={{
+                padding: '0.5rem 1rem', borderRadius: '8px',
+                border: `1px solid ${evento === e ? 'var(--primary)' : 'var(--border)'}`,
+                background: evento === e ? 'rgba(0,229,255,0.1)' : 'var(--bg-card)',
+                color: evento === e ? 'var(--primary)' : 'var(--text-muted)',
+                cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '0.9rem',
+                fontWeight: 600, letterSpacing: '0.03em', transition: 'all 0.2s',
+                textTransform: 'capitalize',
+              }}>{e}</button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Grafico */}
