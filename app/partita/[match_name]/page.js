@@ -385,7 +385,7 @@ export default function PartitaPage() {
     if (!match_name || !userReady) return
     Promise.all([
       fetchAPI(`/v2/analytics/${tenant}/report/${match_name}`),
-      fetchAPI(`/v2/analytics/${tenant}/mappa/${match_name}/tipi`),
+      fetchAPI(`/v2/analytics/${tenant}/mappa/${match_name}/tipi`).catch(() => ({ tipi: [] })),
     ]).then(([report, tipi]) => {
       setPartita(report.partita)
       setAggregati(report.aggregati || [])
