@@ -27,6 +27,7 @@ export default function ConfrontoPage() {
   const [categoria,            setCategoria]            = useState(null)
   const [evento,               setEvento]               = useState('shot')
   const [eventiDisponibili,    setEventiDisponibili]    = useState([])
+  const [eventiLoading,        setEventiLoading]        = useState(false)
   const [data,                 setData]                 = useState([])
   const [partite,              setPartite]              = useState([])
   const [loading,              setLoading]              = useState(false)
@@ -64,6 +65,7 @@ export default function ConfrontoPage() {
   // Scopri i tipi di evento disponibili per questo tenant
   useEffect(() => {
     if (!tenant) return
+    setEventiLoading(true)
     fetchAPI(`/v2/analytics/${tenant}/aggregati?period=Totale`)
       .then(res => {
         const tipi = [...new Set((res.data || [])
@@ -71,10 +73,10 @@ export default function ConfrontoPage() {
           .map(r => r.event_type)
         )].sort()
         setEventiDisponibili(tipi)
-        // Se l'evento corrente non è disponibile, seleziona il primo
         if (tipi.length > 0 && !tipi.includes(evento)) setEvento(tipi[0])
       })
       .catch(() => setEventiDisponibili([]))
+      .finally(() => setEventiLoading(false))
   }, [tenant])
 
   useEffect(() => {
@@ -208,8 +210,10 @@ export default function ConfrontoPage() {
 
       {/* Selettore evento — solo tipi con dati reali */}
       <div style={{ marginBottom: '2rem' }}>
-        {eventiDisponibili.length === 0 ? (
+        {eventiLoading ? (
           <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Caricamento eventi...</div>
+        ) : eventiDisponibili.length === 0 ? (
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nessun dato disponibile per questo tenant.</div>
         ) : (
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             {eventiDisponibili.map(e => (
