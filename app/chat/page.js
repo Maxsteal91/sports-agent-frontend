@@ -503,11 +503,7 @@ export default function ChatPage() {
   useEffect(() => {
     const u = getUser();
     if (u?.role !== 'admin') return;
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    fetch('/api/upload/v2/tenants', {
-      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-    })
-      .then(r => r.ok ? r.json() : Promise.reject())
+    fetchAPI('/upload/v2/tenants')
       .then(data => {
         const ts = data.tenants || [];
         setAllTenants(ts);
