@@ -7,19 +7,22 @@ import KpiCard from '../components/KpiCard'
 import EventiChart from '../components/EventiChart'
 
 export default function HomePage() {
-  const [user,        setUser]        = useState(null)
-  const [tenant,      setTenant]      = useState('')
-  const [allTenants,  setAllTenants]  = useState([])
-  const [partite,     setPartite]     = useState([])
-  const [kpis,        setKpis]        = useState(null)
-  const [eventiChart, setEventiChart] = useState([])
-  const [loading,     setLoading]     = useState(true)
+  const [user,                 setUser]                 = useState(null)
+  const [tenant,               setTenant]               = useState('')
+  const [allTenants,           setAllTenants]           = useState([])
+  const [categoria,            setCategoria]            = useState(null)
+  const [categorieDisponibili, setCategorieDisponibili] = useState([])
+  const [partite,              setPartite]              = useState([])
+  const [kpis,                 setKpis]                 = useState(null)
+  const [eventiChart,          setEventiChart]          = useState([])
+  const [loading,              setLoading]              = useState(true)
 
   // Leggi utente loggato e imposta tenant/categoria
   useEffect(() => {
     const u = getUser()
     setUser(u)
     if (u?.tenant) setTenant(u.tenant)
+    if (u?.role === 'manager' && u?.categoria) setCategoria(u.categoria)
   }, [])
 
   // Carica lista tenant dall'API (solo admin)
@@ -46,19 +49,35 @@ export default function HomePage() {
     if (!tenant) return
     setLoading(true)
 
+    // Viewer è filtrato al suo tenant+categoria lato API; admin/manager filtrano client-side
+    const viewerCatParam = user?.role === 'viewer' && user?.categoria
+      ? `&category=${user.categoria}` : ''
+
     Promise.all([
-      // Lista partite v2
-      fetchAPI(`/upload/v2/partite?tenant=${tenant}${user?.role === 'viewer' && user?.categoria ? '&category=' + user.categoria : ''}`),
+      // Lista partite v2 — sempre tutte per poter derivare le categorie disponibili
+      fetchAPI(`/upload/v2/partite?tenant=${tenant}${viewerCatParam}`),
       // Aggregati cross-partita per tiri (KPI principale)
       fetchAPI(`/v2/analytics/${tenant}/aggregati?event_type=shot&period=Totale`),
     ]).then(([partiteRes, tiriRes]) => {
-      const ps = partiteRes.data || []
+      const allPs = partiteRes.data || []
+
+      // Categorie disponibili (da tutte le partite del tenant)
+      const cats = [...new Set(allPs.map(p => p.category).filter(Boolean))].sort()
+      setCategorieDisponibili(cats)
+
+      // Filtra per categoria selezionata (client-side, non per viewer)
+      const ps = (categoria && user?.role !== 'viewer')
+        ? allPs.filter(p => p.category === categoria)
+        : allPs
       setPartite(ps)
 
+      const matchNames = new Set(ps.map(p => p.match_name))
+
       // ── KPI ──────────────────────────────────
-      const tiriData = tiriRes.data || []
+      // Filtra aggregati per le sole partite visibili
+      const tiriData = (tiriRes.data || []).filter(r => matchNames.has(r.match_name))
       // Tiri totali del tenant — usa home_team dalla prima partita come nome squadra nel DB
-      const tenantTeam = ps[0]?.home_team || tenant
+      const tenantTeam = ps[0]?.home_team || allPs[0]?.home_team || tenant
       const tiriTotali = tiriData
         .filter(r => r.team === tenantTeam)
         .reduce((s, r) => s + (r.totale || 0), 0)
@@ -116,7 +135,7 @@ export default function HomePage() {
       console.error(err)
       setLoading(false)
     })
-  }, [tenant, user])
+  }, [tenant, categoria, user])
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
@@ -140,33 +159,82 @@ export default function HomePage() {
           </p>
         </div>
 
-        {/* Selettore tenant — solo admin */}
-        {user?.role === 'admin' && (
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            {allTenants.map(t => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
+
+          {/* Selettore tenant — solo admin */}
+          {user?.role === 'admin' && (
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {allTenants.map(t => (
+                <button
+                  key={t}
+                  onClick={() => { setTenant(t); setCategoria(null) }}
+                  style={{
+                    padding: '0.5rem 1.2rem',
+                    borderRadius: '8px',
+                    border: `1px solid ${tenant === t ? 'var(--primary)' : 'var(--border)'}`,
+                    background: tenant === t ? 'rgba(0,229,255,0.1)' : 'transparent',
+                    color: tenant === t ? 'var(--primary)' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-display)',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Selettore categoria — admin e manager, se ci sono più categorie */}
+          {user?.role !== 'viewer' && categorieDisponibili.length > 1 && (
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <button
-                key={t}
-                onClick={() => setTenant(t)}
+                onClick={() => setCategoria(null)}
                 style={{
-                  padding: '0.5rem 1.2rem',
-                  borderRadius: '8px',
-                  border: `1px solid ${tenant === t ? 'var(--primary)' : 'var(--border)'}`,
-                  background: tenant === t ? 'rgba(0,229,255,0.1)' : 'transparent',
-                  color: tenant === t ? 'var(--primary)' : 'var(--text-muted)',
+                  padding: '0.3rem 0.9rem',
+                  borderRadius: '6px',
+                  border: `1px solid ${!categoria ? 'var(--accent)' : 'var(--border)'}`,
+                  background: !categoria ? 'rgba(139,92,246,0.12)' : 'transparent',
+                  color: !categoria ? 'var(--accent)' : 'var(--text-muted)',
                   cursor: 'pointer',
-                  fontFamily: 'var(--font-display)',
-                  fontSize: '0.85rem',
+                  fontSize: '0.75rem',
                   fontWeight: 600,
-                  letterSpacing: '0.08em',
+                  letterSpacing: '0.06em',
                   textTransform: 'uppercase',
                   transition: 'all 0.2s',
                 }}
               >
-                {t}
+                TUTTE
               </button>
-            ))}
-          </div>
-        )}
+              {categorieDisponibili.map(c => (
+                <button
+                  key={c}
+                  onClick={() => setCategoria(c)}
+                  style={{
+                    padding: '0.3rem 0.9rem',
+                    borderRadius: '6px',
+                    border: `1px solid ${categoria === c ? 'var(--accent)' : 'var(--border)'}`,
+                    background: categoria === c ? 'rgba(139,92,246,0.12)' : 'transparent',
+                    color: categoria === c ? 'var(--accent)' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
+
+        </div>
       </div>
 
       {/* KPI Cards */}
