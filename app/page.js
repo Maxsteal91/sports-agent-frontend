@@ -6,11 +6,10 @@ import { getUser } from '../lib/auth'
 import KpiCard from '../components/KpiCard'
 import EventiChart from '../components/EventiChart'
 
-const ALL_TENANTS = ['mazzola', 'sangiovannese']
-
 export default function HomePage() {
   const [user,        setUser]        = useState(null)
-  const [tenant,      setTenant]      = useState('mazzola')
+  const [tenant,      setTenant]      = useState('')
+  const [allTenants,  setAllTenants]  = useState([])
   const [partite,     setPartite]     = useState([])
   const [kpis,        setKpis]        = useState(null)
   const [eventiChart, setEventiChart] = useState([])
@@ -21,6 +20,26 @@ export default function HomePage() {
     const u = getUser()
     setUser(u)
     if (u?.tenant) setTenant(u.tenant)
+  }, [])
+
+  // Carica lista tenant dall'API (solo admin)
+  useEffect(() => {
+    const u = getUser()
+    if (u?.role !== 'admin') return
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+    fetch('/api/upload/v2/tenants', {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+    })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => {
+        const ts = data.tenants || []
+        setAllTenants(ts)
+        if (!u?.tenant && ts.length > 0) setTenant(ts[0])
+      })
+      .catch(() => {
+        setAllTenants(['mazzola', 'sangiovannese'])
+        if (!u?.tenant) setTenant('mazzola')
+      })
   }, [])
 
   useEffect(() => {
@@ -38,8 +57,8 @@ export default function HomePage() {
 
       // ── KPI ──────────────────────────────────
       const tiriData = tiriRes.data || []
-      // Tiri totali del tenant (solo la squadra di casa = tenant)
-      const tenantTeam = tenant === 'mazzola' ? 'mazzola' : 'san giovannese 1927'
+      // Tiri totali del tenant — usa home_team dalla prima partita come nome squadra nel DB
+      const tenantTeam = ps[0]?.home_team || tenant
       const tiriTotali = tiriData
         .filter(r => r.team === tenantTeam)
         .reduce((s, r) => s + (r.totale || 0), 0)
@@ -117,14 +136,14 @@ export default function HomePage() {
             DASHBOARD
           </h1>
           <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-            {tenant === 'mazzola' ? 'Valentino Mazzola Siena' : 'Sangiovannese 1927'} — Stagione in corso
+            {tenant.charAt(0).toUpperCase() + tenant.slice(1)} — Stagione in corso
           </p>
         </div>
 
         {/* Selettore tenant — solo admin */}
         {user?.role === 'admin' && (
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            {ALL_TENANTS.map(t => (
+            {allTenants.map(t => (
               <button
                 key={t}
                 onClick={() => setTenant(t)}
