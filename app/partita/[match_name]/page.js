@@ -417,7 +417,16 @@ export default function PartitaPage() {
 
   const teamA = partita.home_team || ''
   const teamB = partita.away_team || ''
-  const TABS  = ['sintesi', 'tiri', 'mappa campo', 'passaggi', 'cross & lanci', 'duelli']
+  // Mostra solo le tab con dati effettivi negli aggregati
+  const eventiPresenti = new Set(aggregati.filter(a => a.totale > 0).map(a => a.event_type))
+  const TABS = [
+    'sintesi',
+    ...(eventiPresenti.has('shot')                                  ? ['tiri']          : []),
+    ...(tipiCoordinate.length > 0                                   ? ['mappa campo']   : []),
+    ...(eventiPresenti.has('passaggi')                              ? ['passaggi']      : []),
+    ...(eventiPresenti.has('cross') || eventiPresenti.has('lanci')  ? ['cross & lanci'] : []),
+    ...(eventiPresenti.has('duelli') || eventiPresenti.has('dribbling') || eventiPresenti.has('palle recuperate') ? ['duelli'] : []),
+  ]
 
   // Helper aggregati
   const agg = (eventType, team, period = 'Totale') =>
