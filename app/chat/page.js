@@ -484,10 +484,11 @@ export default function ChatPage() {
   const [input,     setInput]     = useState('');
   const [loading,   setLoading]   = useState(false);
   const [sessionId, setSessionId] = useState(null);
-  const [user,      setUser]      = useState(null);
-  const [tenant,    setTenant]    = useState('mazzola');
-  const [matchName, setMatchName] = useState('');
-  const [partite,   setPartite]   = useState([]);
+  const [user,       setUser]       = useState(null);
+  const [tenant,     setTenant]     = useState('');
+  const [allTenants, setAllTenants] = useState([]);
+  const [matchName,  setMatchName]  = useState('');
+  const [partite,    setPartite]    = useState([]);
 
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
@@ -496,6 +497,26 @@ export default function ChatPage() {
     const u = getUser();
     setUser(u);
     if (u?.tenant) setTenant(u.tenant);
+  }, []);
+
+  // Carica lista tenant dall'API — solo admin
+  useEffect(() => {
+    const u = getUser();
+    if (u?.role !== 'admin') return;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    fetch('/api/upload/v2/tenants', {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+    })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => {
+        const ts = data.tenants || [];
+        setAllTenants(ts);
+        if (!u?.tenant && ts.length > 0) setTenant(ts[0]);
+      })
+      .catch(() => {
+        setAllTenants(['mazzola', 'sangiovannese']);
+        if (!u?.tenant) setTenant('mazzola');
+      });
   }, []);
 
   // Carica lista partite quando cambia tenant
@@ -604,15 +625,16 @@ export default function ChatPage() {
         {user && user.role === 'admin' ? (
           <select
             value={tenant}
-            onChange={e => setTenant(e.target.value)}
+            onChange={e => { setTenant(e.target.value); setMatchName(''); setSessionId(null); }}
             style={{
               background: T.bgInput, border: `1px solid ${T.border}`,
               borderRadius: 6, padding: '4px 10px', fontSize: 12,
               color: T.textPrimary, cursor: 'pointer', marginLeft: 'auto',
             }}
           >
-            <option value="mazzola">Mazzola</option>
-            <option value="sangiovannese">Sangiovannese</option>
+            {allTenants.map(t => (
+              <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+            ))}
           </select>
         ) : (
           <span style={{
@@ -701,7 +723,7 @@ export default function ChatPage() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
-              placeholder={`Chiedi al ${tenant === 'mazzola' ? 'Mazzola' : 'Sangiovannese'}…`}
+              placeholder={tenant ? `Chiedi al ${tenant.charAt(0).toUpperCase() + tenant.slice(1)}…` : 'Fai una domanda…'}
               rows={1}
               style={{
                 flex: 1, background: 'transparent', border: 'none',
