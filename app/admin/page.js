@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation'
 import { fetchAPI, postAPI, putAPI, deleteAPI } from '../../lib/api'
 import { getUser } from '../../lib/auth'
 
-const TENANTS = ['mazzola', 'sangiovannese']
 const CATEGORIE = ['prima', 'u21', 'u19', 'u17', 'u16', 'u15']
 const RUOLI = ['admin', 'manager', 'viewer']
 
@@ -29,6 +28,7 @@ const badge = (role) => {
 export default function AdminPage() {
   const router = useRouter()
   const [users, setUsers] = useState([])
+  const [allTenants, setAllTenants] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editUser, setEditUser] = useState(null)
@@ -41,6 +41,9 @@ export default function AdminPage() {
     const user = getUser()
     if (!user || user.role !== 'admin') { router.push('/'); return }
     loadUsers()
+    fetchAPI('/upload/v2/tenants')
+      .then(data => setAllTenants(data.tenants || []))
+      .catch(() => setAllTenants(['mazzola', 'sangiovannese']))
   }, [])
 
   const loadUsers = async () => {
@@ -258,7 +261,7 @@ export default function AdminPage() {
                 </label>
                 <select value={form.tenant} onChange={e => setForm({...form, tenant:e.target.value})} style={selectStyle}>
                   <option value="">— tutti —</option>
-                  {TENANTS.map(t => <option key={t} value={t}>{t}</option>)}
+                  {allTenants.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
 
