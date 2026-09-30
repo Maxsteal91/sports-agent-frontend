@@ -29,7 +29,7 @@ const T = {
 // NORMALIZZA VISUALIZZAZIONE
 // Adatta i dati reali del backend ai componenti viz
 // ─────────────────────────────────────────
-function normalizeVisualization(vizType, data) {
+function normalizeVisualization(vizType, data, vizMeta) {
   if (!vizType || !data || vizType === 'none') return null;
 
   switch (vizType) {
@@ -77,14 +77,16 @@ function normalizeVisualization(vizType, data) {
       };
     }
 
+    case 'field_map':
     case 'shot_map': {
-      // Dati mappa: [{team, x, y, result, minute, period}, ...]
       return {
-        type: 'shot_map',
-        title: 'Mappa tiri',
+        type: 'field_map',
+        title: 'Mappa campo',
+        source_format: vizMeta?.source_format || 'vidswap',
+        event_type:    vizMeta?.event_type    || 'shot',
         data: data.map(d => ({
           ...d,
-          esito: d.result || d.esito || 'wide',
+          esito: d.result || d.outcome || d.esito || '',
         })),
       };
     }
@@ -167,96 +169,100 @@ function BarChartViz({ viz }) {
   );
 }
 
-function ShotMapViz({ viz }) {
-  const W = 340, H = 510;
+function FieldMapViz({ viz }) {
+  const isBalloni = viz.source_format === 'balloni'
+  const et = viz.event_type || 'shot'
+  const G = '#071A0A', L = '#1A5025'
 
-  // Coordinate normalizzate 0-100
-  // x = larghezza campo (0=sinistra, 100=destra)
-  // y = lunghezza campo (0=fondo difesa, 100=fondo attacco)
-  // Mostriamo tutto il campo verticalmente
-  const scaleX = (x) => (x / 100) * W;
-  const scaleY = (y) => H - (y / 100) * H; // inverti Y: 100=alto
+  const FW = 460
+  const FH = isBalloni ? Math.round(FW * 68 / 105) : 420
+  const W = FW + 20, H = FH + 20
 
-  const esito_size    = { goal: 10, save: 8, wide: 5, blocked: 6 };
-  const esito_opacity = { goal: 1,  save: 0.85, wide: 0.5, blocked: 0.65 };
-  const esito_color   = (esito, team, teams) => {
-    const isHome = team === teams[0];
-    if (esito === 'goal') return '#FFD700';
-    return isHome ? T.primary : T.accent;
-  };
+  const sx = (x) => 10 + (x / 100) * FW
+  const sy = isBalloni
+    ? (y) => 10 + (y / 100) * FH
+    : (y) => 10 + ((100 - y) / 100) * FH
 
-  // Trova le squadre uniche
-  const teams = [...new Set(viz.data.map(d => d.team))];
+  const teams = [...new Set(viz.data.map(d => d.team).filter(Boolean))]
+  const col = (team) => team === teams[0] ? T.primary : T.accent
+
+  const norm = (s) => (s || '').toLowerCase().replace(/[^a-z]/g, '')
+
+  const marker = (cx, cy, esito, color) => {
+    const e = norm(esito)
+    const isGol = e === 'gol' || e === 'goal'
+    const isIn  = e === 'inporta' || e === 'save' || e === 'saved' || e === 'nellospecchio'
+    const isFuori = e === 'fuori' || e === 'wide' || e === 'off'
+    const isMurato = e === 'murato' || e === 'blocked'
+    const isPalo = e === 'palotraversa' || e === 'post' || e === 'palo' || e === 'traversa'
+    const isRiuscito = e === 'riuscito' || e === 'completed'
+    const isRespinto = e === 'respinto' || e === 'failed'
+    const s = 5
+
+    if (et === 'shot') {
+      if (isGol)    return <text key="m" x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize={13} fill={color} stroke="white" strokeWidth={0.4}>★</text>
+      if (isIn)     return <circle key="m" cx={cx} cy={cy} r={6} fill={color} opacity={0.9} />
+      if (isFuori)  return <g key="m"><line x1={cx-s} y1={cy-s} x2={cx+s} y2={cy+s} stroke={color} strokeWidth={2}/><line x1={cx+s} y1={cy-s} x2={cx-s} y2={cy+s} stroke={color} strokeWidth={2}/></g>
+      if (isMurato) return <rect key="m" x={cx-5} y={cy-5} width={10} height={10} fill={color} opacity={0.85} />
+      if (isPalo)   return <polygon key="m" points={`${cx},${cy-7} ${cx+6},${cy} ${cx},${cy+7} ${cx-6},${cy}`} fill={color} opacity={0.9} />
+      return <circle key="m" cx={cx} cy={cy} r={5} fill={color} opacity={0.6} />
+    }
+    if (et === 'cross') {
+      if (isRiuscito) return <circle key="m" cx={cx} cy={cy} r={6} fill={color} opacity={0.9} stroke="white" strokeWidth={1} />
+      if (isRespinto) return <g key="m"><line x1={cx-s} y1={cy-s} x2={cx+s} y2={cy+s} stroke={color} strokeWidth={2}/><line x1={cx+s} y1={cy-s} x2={cx-s} y2={cy+s} stroke={color} strokeWidth={2}/></g>
+      return <polygon key="m" points={`${cx},${cy-7} ${cx+6},${cy+4} ${cx-6},${cy+4}`} fill={color} opacity={0.75} />
+    }
+    return <circle key="m" cx={cx} cy={cy} r={5} fill={color} opacity={0.8} />
+  }
 
   return (
-    <div style={{ marginTop: 16 }}>
-      <div style={{ background: '#071A0A', borderRadius: 8, padding: 12, display: 'inline-block', border: `1px solid #1A3020` }}>
+    <div style={{ marginTop: 16, overflowX: 'auto' }}>
+      <div style={{ background: G, borderRadius: 8, padding: 10, display: 'inline-block', border: `1px solid #1A3020` }}>
         <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
-          {/* Campo verde */}
-          <rect x={0} y={0} width={W} height={H} fill="#071A0A" />
-
-          {/* Bordo campo */}
-          <rect x={10} y={10} width={W-20} height={H-20} fill="none" stroke="#1A5025" strokeWidth={1.5} />
-
-          {/* Linea centrocampo */}
-          <line x1={10} y1={H/2} x2={W-10} y2={H/2} stroke="#1A5025" strokeWidth={1} strokeDasharray="4,4" />
-
-          {/* Cerchio centrocampo */}
-          <circle cx={W/2} cy={H/2} r={50} fill="none" stroke="#1A5025" strokeWidth={1} />
-          <circle cx={W/2} cy={H/2} r={2} fill="#1A5025" />
-
-          {/* Area grande superiore (difesa avversaria) */}
-          <rect x={W*0.18} y={10} width={W*0.64} height={H*0.16} fill="none" stroke="#1A5025" strokeWidth={1} />
-          {/* Area piccola superiore */}
-          <rect x={W*0.35} y={10} width={W*0.3} height={H*0.06} fill="none" stroke="#1A5025" strokeWidth={1} />
-          {/* Porta superiore */}
-          <rect x={W*0.41} y={10} width={W*0.18} height={6} fill="#1A5025" />
-
-          {/* Area grande inferiore (porta di casa) */}
-          <rect x={W*0.18} y={H-10-H*0.16} width={W*0.64} height={H*0.16} fill="none" stroke="#1A5025" strokeWidth={1} />
-          {/* Area piccola inferiore */}
-          <rect x={W*0.35} y={H-10-H*0.06} width={W*0.3} height={H*0.06} fill="none" stroke="#1A5025" strokeWidth={1} />
-          {/* Porta inferiore */}
-          <rect x={W*0.41} y={H-16} width={W*0.18} height={6} fill="#1A5025" />
-
-          {/* Tiri */}
-          {viz.data.map((d, i) => {
-            const esito   = d.esito || 'wide';
-            const color   = esito === 'goal' ? '#FFD700' : (d.team === teams[0] ? T.primary : T.accent);
-            const r       = esito_size[esito] || 6;
-            const opacity = esito_opacity[esito] || 0.7;
-            const cx      = scaleX(d.x || 50);
-            const cy      = scaleY(d.y || 50);
-
-            return (
-              <g key={i}>
-                <circle
-                  cx={cx} cy={cy} r={r}
-                  fill={color} opacity={opacity}
-                  stroke={esito === 'goal' ? '#fff' : 'none'}
-                  strokeWidth={1.5}
-                />
-              </g>
-            );
-          })}
-        </svg>
-
-        {/* Legenda */}
-        <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, color: T.textMuted, flexWrap: 'wrap' }}>
-          {teams.map((team, i) => (
-            <span key={team}>
-              <span style={{ color: i === 0 ? T.primary : T.accent }}>●</span> {team}
-            </span>
+          <rect width={W} height={H} fill={G} />
+          {isBalloni ? (
+            <>
+              <rect x={10} y={10} width={FW} height={FH} fill="none" stroke={L} strokeWidth={1.5} />
+              <line x1={10+FW/2} y1={10} x2={10+FW/2} y2={10+FH} stroke={L} strokeWidth={1} />
+              <circle cx={10+FW/2} cy={10+FH/2} r={FH*0.22} fill="none" stroke={L} strokeWidth={1} />
+              <circle cx={10+FW/2} cy={10+FH/2} r={2} fill={L} />
+              <rect x={10} y={10+FH*0.18} width={FW*0.16} height={FH*0.64} fill="none" stroke={L} strokeWidth={1} />
+              <rect x={10} y={10+FH*0.32} width={FW*0.055} height={FH*0.36} fill="none" stroke={L} strokeWidth={1} />
+              <rect x={10} y={10+FH*0.37} width={4} height={FH*0.26} fill={L} />
+              <rect x={10+FW*0.84} y={10+FH*0.18} width={FW*0.16} height={FH*0.64} fill="none" stroke={L} strokeWidth={1} />
+              <rect x={10+FW*0.945} y={10+FH*0.32} width={FW*0.055} height={FH*0.36} fill="none" stroke={L} strokeWidth={1} />
+              <rect x={10+FW-4} y={10+FH*0.37} width={4} height={FH*0.26} fill={L} />
+            </>
+          ) : (
+            <>
+              <rect x={10} y={10} width={FW} height={FH} fill="none" stroke={L} strokeWidth={1.5} />
+              <line x1={10} y1={10+FH/2} x2={10+FW} y2={10+FH/2} stroke={L} strokeWidth={1} strokeDasharray="4,4" />
+              <circle cx={10+FW/2} cy={10+FH/2} r={50} fill="none" stroke={L} strokeWidth={1} />
+              <circle cx={10+FW/2} cy={10+FH/2} r={2} fill={L} />
+              <rect x={10+FW*0.18} y={10} width={FW*0.64} height={FH*0.16} fill="none" stroke={L} strokeWidth={1} />
+              <rect x={10+FW*0.35} y={10} width={FW*0.3} height={FH*0.06} fill="none" stroke={L} strokeWidth={1} />
+              <rect x={10+FW*0.41} y={10} width={FW*0.18} height={6} fill={L} />
+              <rect x={10+FW*0.18} y={10+FH-FH*0.16} width={FW*0.64} height={FH*0.16} fill="none" stroke={L} strokeWidth={1} />
+              <rect x={10+FW*0.35} y={10+FH-FH*0.06} width={FW*0.3} height={FH*0.06} fill="none" stroke={L} strokeWidth={1} />
+              <rect x={10+FW*0.41} y={10+FH-6} width={FW*0.18} height={6} fill={L} />
+            </>
+          )}
+          {viz.data.map((d, i) => (
+            <g key={i}>{marker(sx(d.x ?? 50), sy(d.y ?? 50), d.esito, col(d.team))}</g>
           ))}
-          <span style={{ marginLeft: 'auto' }}>
-            <span style={{ color: '#FFD700' }}>●</span> Goal &nbsp;
-            <span style={{ fontSize: 10, opacity: 0.7 }}>●</span> Parata &nbsp;
-            <span style={{ fontSize: 8, opacity: 0.5 }}>●</span> Fuori
+        </svg>
+        <div style={{ display: 'flex', gap: 10, marginTop: 8, fontSize: 11, color: T.textMuted, flexWrap: 'wrap', alignItems: 'center' }}>
+          {teams.map((team, i) => (
+            <span key={team}><span style={{ color: i === 0 ? T.primary : T.accent }}>●</span> {team}</span>
+          ))}
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, opacity: 0.8 }}>
+            {et === 'shot'  && <><span>★ gol</span><span>● specchio</span><span>✕ fuori</span><span>■ murato</span><span>◆ palo</span></>}
+            {et === 'cross' && <><span>● riuscito</span><span>✕ respinto</span><span>▲ altro</span></>}
           </span>
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 function RadarViz({ viz }) {
@@ -333,14 +339,14 @@ function TableViz({ viz }) {
   );
 }
 
-function Visualization({ vizType, data }) {
-  const viz = normalizeVisualization(vizType, data);
+function Visualization({ vizType, data, vizMeta }) {
+  const viz = normalizeVisualization(vizType, data, vizMeta);
   if (!viz) return null;
   switch (viz.type) {
-    case 'bar_chart': return <BarChartViz viz={viz} />;
-    case 'shot_map':  return <ShotMapViz viz={viz} />;
-    case 'radar':     return <RadarViz viz={viz} />;
-    case 'table':     return <TableViz viz={viz} />;
+    case 'bar_chart':  return <BarChartViz viz={viz} />;
+    case 'field_map':  return <FieldMapViz viz={viz} />;
+    case 'radar':      return <RadarViz viz={viz} />;
+    case 'table':      return <TableViz viz={viz} />;
     default: return null;
   }
 }
@@ -441,7 +447,7 @@ function ChatBubble({ msg }) {
           <>
             <AnswerText text={msg.content} />
             {msg.visualization && msg.data && (
-              <Visualization vizType={msg.visualization} data={msg.data} />
+              <Visualization vizType={msg.visualization} data={msg.data} vizMeta={msg.vizMeta} />
             )}
             <SqlBadge sql={msg.sql} />
           </>
@@ -564,8 +570,9 @@ export default function ChatPage() {
           role:          'assistant',
           content:       res.answer || 'Nessuna risposta.',
           visualization: res.visualization || null,
-          data:          res.data || null,
-          sql:           res.sql  || null,
+          vizMeta:       res.viz_meta      || null,
+          data:          res.data          || null,
+          sql:           res.sql           || null,
         }
       ]);
     } catch (err) {
