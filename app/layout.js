@@ -26,10 +26,11 @@ export default function RootLayout({ children }) {
     : '⚽ SPORTS ANALYTICS'
 
   const navLinks = [
-    { href: '/',          label: 'Dashboard' },
-    { href: '/confronto', label: 'Confronto' },
-    { href: '/chat',      label: 'AI Chat' },
-    { href: '/upload',    label: 'Upload' },
+    { href: '/',            label: 'Dashboard' },
+    { href: '/confronto',   label: 'Confronto' },
+    { href: '/giocatori',   label: 'Giocatori' },
+    { href: '/chat',        label: 'AI Chat' },
+    { href: '/upload',      label: 'Upload' },
     ...(user?.role === 'admin' ? [{ href: '/admin', label: 'Admin' }] : []),
   ]
 
