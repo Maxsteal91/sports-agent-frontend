@@ -81,7 +81,7 @@ function GraficoSpeculare({ rows, teamA, teamB }) {
 // ─────────────────────────────────────────
 // MAPPA CAMPO GENERICA — qualsiasi event_type
 // ─────────────────────────────────────────
-function MappaCampoV2({ data, eventType, teamA, teamB }) {
+function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat }) {
   const [filtroTeam, setFiltroTeam] = useState('tutti')
   const norm = t => (t || '').toLowerCase().trim()
   const teamAn = norm(teamA)
@@ -95,19 +95,23 @@ function MappaCampoV2({ data, eventType, teamA, teamB }) {
   const nHome = data.filter(d => norm(d.team) === teamAn).length
   const nAway = data.filter(d => norm(d.team) !== teamAn).length
 
-  const W = 580, H = 460, PAD = 16
-  const fw = W - PAD * 2, fh = H - PAD * 2
+  const isBalloni = sourceFormat === 'balloni'
+  const W = 580, PAD = 16
+  const fw = W - PAD * 2  // 548px
+  // Balloni: campo intero orizzontale (105:68) → fh proporzionale
+  // VidSwap: mezza campo verticale → H fisso 460
+  const fh = isBalloni ? Math.round(fw * 68 / 105) : 428
+  const H  = fh + PAD * 2
+
   const sx = x => PAD + (x / 100) * fw
   const sy = y => PAD + (y / 100) * fh
 
-  // Colori outcome per shot (VidSwap inglese + Balloni italiano)
   const SHOT_COLORS = {
     goal: '#EF4444', gol: '#EF4444',
     save: '#FACC15', in_porta: '#FACC15',
     blocked: '#94A3B8', murato: '#94A3B8',
     wide: '#3B82F6', fuori: '#3B82F6', palo_traversa: '#F97316',
   }
-  // Colori outcome per cross
   const CROSS_COLORS = {
     riuscito: '#10B981', completed: '#10B981',
     respinto: '#EF4444', blocked: '#EF4444',
@@ -115,62 +119,223 @@ function MappaCampoV2({ data, eventType, teamA, teamB }) {
 
   const getColor = (d) => {
     const isHome = norm(d.team) === teamAn
-    const outcome = (d.attrs?.outcome || d.attrs?.result || d.outcome || d.result || '').toLowerCase()
-
-    if (eventType === 'shot' && outcome) return SHOT_COLORS[outcome] || '#3B82F6'
-    if (eventType === 'cross' && outcome) return CROSS_COLORS[outcome] || (isHome ? COLOR_HOME : COLOR_AWAY)
+    // Colore = squadra sempre (per tiri e cross il simbolo encoda l'esito)
     return isHome ? COLOR_HOME : COLOR_AWAY
   }
 
   const marker = (d, i) => {
     const col = getColor(d)
     const x = sx(d.x ?? 50), y = sy(d.y ?? 50)
-    const isShot = eventType === 'shot'
     const outcome = (d.attrs?.outcome || d.attrs?.result || '').toLowerCase()
-    const isGoal = outcome === 'goal' || outcome === 'gol'
-    const r = isGoal ? 7 : isShot ? 5 : 6
 
+    if (eventType === 'shot') {
+      // Simbolo encoda l'esito, colore encoda la squadra
+      if (outcome === 'gol' || outcome === 'goal') return (
+        <g key={i}>
+          <circle cx={x} cy={y} r={9} fill={col} stroke="rgba(255,255,255,0.9)" strokeWidth={1.5} />
+          <text x={x} y={y+4} textAnchor="middle" fontSize={11} fill="white" fontWeight="bold">★</text>
+        </g>
+      )
+      if (outcome === 'in_porta' || outcome === 'save') return (
+        <circle key={i} cx={x} cy={y} r={6} fill={col} opacity={0.85}
+          stroke="rgba(255,255,255,0.4)" strokeWidth={1} />
+      )
+      if (outcome === 'fuori' || outcome === 'wide') {
+        const r = 5
+        return (
+          <g key={i} opacity={0.8}>
+            <line x1={x-r} y1={y-r} x2={x+r} y2={y+r} stroke={col} strokeWidth={2.5} strokeLinecap="round" />
+            <line x1={x+r} y1={y-r} x2={x-r} y2={y+r} stroke={col} strokeWidth={2.5} strokeLinecap="round" />
+          </g>
+        )
+      }
+      if (outcome === 'murato' || outcome === 'blocked') return (
+        <rect key={i} x={x-5} y={y-5} width={10} height={10}
+          fill={col} opacity={0.85} rx={1} />
+      )
+      if (outcome === 'palo_traversa') return (
+        <polygon key={i} points={`${x},${y-7} ${x+7},${y} ${x},${y+7} ${x-7},${y}`}
+          fill={col} opacity={0.85} />
+      )
+      // esito sconosciuto
+      return <circle key={i} cx={x} cy={y} r={4} fill={col} opacity={0.6} />
+    }
+
+    if (eventType === 'cross') {
+      // Colore = squadra, simbolo = esito, freccia = traiettoria
+      const isRiuscito = outcome === 'riuscito' || outcome === 'completed'
+      const isRespinto = outcome === 'respinto' || outcome === 'blocked'
+      return (
+        <g key={i}>
+          {d.x2 != null && d.y2 != null && (
+            <line x1={x} y1={y} x2={sx(d.x2)} y2={sy(d.y2)}
+              stroke={col} strokeWidth={1.5} opacity={0.5}
+              strokeDasharray={isRespinto ? '3,2' : 'none'} />
+          )}
+          {isRespinto ? (
+            <g opacity={0.85}>
+              <line x1={x-5} y1={y-5} x2={x+5} y2={y+5} stroke={col} strokeWidth={2.5} strokeLinecap="round" />
+              <line x1={x+5} y1={y-5} x2={x-5} y2={y+5} stroke={col} strokeWidth={2.5} strokeLinecap="round" />
+            </g>
+          ) : isRiuscito ? (
+            <circle cx={x} cy={y} r={6} fill={col} opacity={0.9}
+              stroke="rgba(255,255,255,0.5)" strokeWidth={1} />
+          ) : (
+            <polygon points={`${x},${y-6} ${x+6},${y+6} ${x-6},${y+6}`}
+              fill={col} opacity={0.65} />
+          )}
+        </g>
+      )
+    }
+
+    // Altri eventi: cerchio + freccia se presente
     return (
       <g key={i}>
-        {/* Freccia se c'è x2/y2 (es. cross: origine → destinazione) */}
         {d.x2 != null && d.y2 != null && (
-          <line
-            x1={x} y1={y} x2={sx(d.x2)} y2={sy(d.y2)}
-            stroke={col} strokeWidth={1} opacity={0.4} strokeDasharray="3,2"
-          />
+          <line x1={x} y1={y} x2={sx(d.x2)} y2={sy(d.y2)}
+            stroke={col} strokeWidth={1} opacity={0.4} strokeDasharray="3,2" />
         )}
-        <circle cx={x} cy={y} r={r} fill={col}
-          opacity={isGoal ? 1 : 0.75}
-          stroke={isGoal ? 'rgba(255,255,255,0.8)' : 'none'}
-          strokeWidth={isGoal ? 1.5 : 0}
-        />
+        <circle cx={x} cy={y} r={6} fill={col} opacity={0.75} />
       </g>
     )
   }
 
   const ls = { stroke: 'rgba(255,255,255,0.7)', strokeWidth: 1.5, fill: 'none' }
-  const NH = 8
-  const stripes = Array.from({ length: NH }, (_, i) => (
-    <rect key={i} x={0} y={i * (H / NH)} width={W} height={H / NH} fill={i % 2 === 0 ? '#3d7a2e' : '#437f32'} />
-  ))
 
-  // Campo completo: 105x68m (ridotto a metà altezza) → mostriamo metà campo attaccante
-  // Helper pitch→SVG: xm 0-68, ym 0-52.5
+  // ── Balloni: campo intero orizzontale 105×68m ──
+  // pmF(xNorm 0-100, yNorm 0-100) → pixel SVG
+  // Misure normalizzate sul campo 105×68:
+  //   Area grande:  x 0–15.71 / 84.29–100,  y 20.35–79.65
+  //   Area piccola: x 0–5.24  / 94.76–100,  y 36.53–63.47
+  //   Penalty spot: x 10.48 / 89.52,         y 50
+  //   Porta:        x <0 / >100,              y 44.62–55.38
+  const pmF = (xn, yn) => ({ x: PAD + (xn / 100) * fw, y: PAD + (yn / 100) * fh })
+  const rCentro = (9.15 / 105) * fw
+
+  const balloniField = (
+    <>
+      {/* Strisce verticali (campo orizzontale) */}
+      {Array.from({ length: 10 }, (_, i) => (
+        <rect key={i} x={PAD + i * fw / 10} y={PAD} width={fw / 10} height={fh}
+          fill={i % 2 === 0 ? '#3d7a2e' : '#437f32'} />
+      ))}
+      <rect x={PAD} y={PAD} width={fw} height={fh} {...ls} />
+      {/* Linea centrocampo */}
+      <line x1={pmF(50,0).x} y1={pmF(50,0).y} x2={pmF(50,100).x} y2={pmF(50,100).y}
+        stroke="rgba(255,255,255,0.55)" strokeWidth={1.5} />
+      {/* Cerchio centrocampo */}
+      <circle cx={pmF(50,50).x} cy={pmF(50,50).y} r={rCentro}
+        fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth={1.5} />
+      <circle cx={pmF(50,50).x} cy={pmF(50,50).y} r={2.5} fill="rgba(255,255,255,0.65)" />
+      {/* clipPath per lunette */}
+      <defs>
+        <clipPath id="clipLL">
+          <rect x={pmF(15.71,0).x} y={PAD} width={fw - (pmF(15.71,0).x - PAD)} height={fh} />
+        </clipPath>
+        <clipPath id="clipLR">
+          <rect x={PAD} y={PAD} width={pmF(84.29,0).x - PAD} height={fh} />
+        </clipPath>
+      </defs>
+      {/* Area grande sinistra */}
+      <rect x={pmF(0,20.35).x} y={pmF(0,20.35).y}
+        width={pmF(15.71,20.35).x - pmF(0,20.35).x}
+        height={pmF(0,79.65).y - pmF(0,20.35).y} {...ls} fill="rgba(0,0,0,0.05)" />
+      {/* Area piccola sinistra */}
+      <rect x={pmF(0,36.53).x} y={pmF(0,36.53).y}
+        width={pmF(5.24,36.53).x - pmF(0,36.53).x}
+        height={pmF(0,63.47).y - pmF(0,36.53).y} {...ls} />
+      {/* Penalty spot + lunetta sinistra */}
+      <circle cx={pmF(10.48,50).x} cy={pmF(10.48,50).y} r={2.5} fill="rgba(255,255,255,0.65)" />
+      <circle cx={pmF(10.48,50).x} cy={pmF(10.48,50).y} r={rCentro}
+        fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth={1.5} clipPath="url(#clipLL)" />
+      {/* Area grande destra */}
+      <rect x={pmF(84.29,20.35).x} y={pmF(84.29,20.35).y}
+        width={pmF(100,20.35).x - pmF(84.29,20.35).x}
+        height={pmF(84.29,79.65).y - pmF(84.29,20.35).y} {...ls} fill="rgba(0,0,0,0.05)" />
+      {/* Area piccola destra */}
+      <rect x={pmF(94.76,36.53).x} y={pmF(94.76,36.53).y}
+        width={pmF(100,36.53).x - pmF(94.76,36.53).x}
+        height={pmF(94.76,63.47).y - pmF(94.76,36.53).y} {...ls} />
+      {/* Penalty spot + lunetta destra */}
+      <circle cx={pmF(89.52,50).x} cy={pmF(89.52,50).y} r={2.5} fill="rgba(255,255,255,0.65)" />
+      <circle cx={pmF(89.52,50).x} cy={pmF(89.52,50).y} r={rCentro}
+        fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth={1.5} clipPath="url(#clipLR)" />
+      {/* Porta sinistra */}
+      <rect x={pmF(0,44.62).x - (2.33/100)*fw} y={pmF(0,44.62).y}
+        width={(2.33/100)*fw} height={pmF(0,55.38).y - pmF(0,44.62).y}
+        fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.7)" strokeWidth={1.5} />
+      {/* Porta destra */}
+      <rect x={pmF(100,44.62).x} y={pmF(100,44.62).y}
+        width={(2.33/100)*fw} height={pmF(100,55.38).y - pmF(100,44.62).y}
+        fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.7)" strokeWidth={1.5} />
+    </>
+  )
+
+  // ── VidSwap: mezza campo verticale (codice originale) ──
   const pm = (xm, ym) => ({ x: PAD + (xm / 68) * fw, y: PAD + (ym / 52.5) * fh })
+  const vidswapField = (
+    <>
+      {Array.from({ length: 8 }, (_, i) => (
+        <rect key={i} x={0} y={i * (H / 8)} width={W} height={H / 8}
+          fill={i % 2 === 0 ? '#3d7a2e' : '#437f32'} />
+      ))}
+      <rect x={PAD} y={PAD} width={fw} height={fh} {...ls} />
+      <line x1={PAD} y1={pm(0,0).y} x2={W-PAD} y2={pm(0,0).y} stroke="rgba(255,255,255,0.4)" strokeWidth={1} />
+      <path d={`M ${pm(68*0.35,0).x} ${pm(0,0).y} A ${(9/68)*fw} ${(9/68)*fw} 0 0 0 ${pm(68*0.65,0).x} ${pm(0,0).y}`}
+        fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth={1} />
+      <rect x={pm(13.84,36).x} y={pm(13.84,36).y}
+        width={pm(54.16,36).x - pm(13.84,36).x}
+        height={pm(0,52.5).y - pm(0,36).y} {...ls} fill="rgba(0,0,0,0.05)" />
+      <rect x={pm(24.84,46).x} y={pm(24.84,46).y}
+        width={pm(43.16,46).x - pm(24.84,46).x}
+        height={pm(0,52.5).y - pm(0,46).y} {...ls} />
+      <rect x={pm(27.84,52.5).x} y={pm(27.84,52.5).y}
+        width={pm(40.16,52.5).x - pm(27.84,52.5).x} height={9}
+        fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.7)" strokeWidth={1.5} />
+      <circle cx={pm(34,41).x} cy={pm(34,41).y} r={2.5} fill="rgba(255,255,255,0.65)" />
+    </>
+  )
+
+  // Per tiri e cross: legenda a due livelli (colore=squadra, simbolo=esito)
+  const shotSymbolLegend = (eventType === 'shot' || eventType === 'cross') ? (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
+      {/* Riga 1: colori squadre */}
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
+        {[[COLOR_HOME, teamA], [COLOR_AWAY, teamB]].map(([col, label]) => (
+          <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#64748B' }}>
+            <svg width={12} height={12}><circle cx={6} cy={6} r={6} fill={col} /></svg>{label}
+          </span>
+        ))}
+      </div>
+      {/* Riga 2: simboli esiti */}
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
+        {(eventType === 'cross' ? [
+          { svg: <circle cx={6} cy={6} r={6} fill="#888" stroke="rgba(255,255,255,0.4)" strokeWidth={1}/>, label: 'Riuscito' },
+          { svg: <><line x1={2} y1={2} x2={10} y2={10} stroke="#888" strokeWidth={2.5} strokeLinecap="round"/><line x1={10} y1={2} x2={2} y2={10} stroke="#888" strokeWidth={2.5} strokeLinecap="round"/></>, label: 'Respinto' },
+          { svg: <polygon points="6,0 12,12 0,12" fill="#888" opacity={0.6}/>, label: 'Altro' },
+        ] : [
+          { svg: <><circle cx={7} cy={7} r={7} fill="#888" stroke="rgba(255,255,255,0.7)" strokeWidth={1}/><text x={7} y={11} textAnchor="middle" fontSize={9} fill="white">★</text></>, label: isBalloni ? 'Gol' : 'Goal' },
+          { svg: <circle cx={6} cy={6} r={6} fill="#888" stroke="rgba(255,255,255,0.3)" strokeWidth={1}/>, label: isBalloni ? 'In porta' : 'Save' },
+          { svg: <><line x1={2} y1={2} x2={10} y2={10} stroke="#888" strokeWidth={2.5} strokeLinecap="round"/><line x1={10} y1={2} x2={2} y2={10} stroke="#888" strokeWidth={2.5} strokeLinecap="round"/></>, label: isBalloni ? 'Fuori' : 'Wide' },
+          { svg: <rect x={1} y={1} width={10} height={10} fill="#888" rx={1}/>, label: isBalloni ? 'Murato' : 'Blocked' },
+          { svg: <polygon points="6,0 12,6 6,12 0,6" fill="#888"/>, label: 'Palo/traversa' },
+        ]).map(({ svg, label }) => (
+          <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#64748B' }}>
+            <svg width={12} height={12}>{svg}</svg>{label}
+          </span>
+        ))}
+      </div>
+    </div>
+  ) : null
 
   const legendItems = (() => {
-    if (eventType === 'shot') return [
-      ['#EF4444', 'Goal'], ['#FACC15', 'Nello specchio'], ['#94A3B8', 'Murato/blocked'], ['#3B82F6', 'Fuori'], ['#F97316', 'Palo/traversa']
-    ]
-    if (eventType === 'cross') return [
-      [COLOR_HOME, teamA], [COLOR_AWAY, teamB], ['#10B981', 'Riuscito'], ['#EF4444', 'Respinto']
-    ]
+    if (eventType === 'shot') return []  // gestita da shotSymbolLegend
+    if (eventType === 'cross') return []  // gestita inline sotto
     return [[COLOR_HOME, teamA], [COLOR_AWAY, teamB]]
   })()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-      {/* Filtro squadra */}
       <div style={{ display: 'flex', gap: 8, alignSelf: 'flex-start', alignItems: 'center', width: '100%' }}>
         {[
           { key: 'tutti', label: 'Entrambe', color: '#94A3B8', n: data.length },
@@ -191,42 +356,22 @@ function MappaCampoV2({ data, eventType, teamA, teamB }) {
         <span style={{ marginLeft: 'auto', fontSize: 11, color: '#475569' }}>{filtered.length} eventi</span>
       </div>
 
-      {/* Campo SVG */}
       <div style={{ borderRadius: 8, overflow: 'hidden', border: '1.5px solid rgba(255,255,255,0.15)', boxShadow: '0 4px 24px rgba(0,0,0,0.5)' }}>
         <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
-          {stripes}
-          <rect x={PAD} y={PAD} width={fw} height={fh} {...ls} />
-          {/* Linea centrocampo */}
-          <line x1={PAD} y1={pm(0, 0).y} x2={W - PAD} y2={pm(0, 0).y} stroke="rgba(255,255,255,0.4)" strokeWidth={1} />
-          {/* Semicerchio */}
-          <path d={`M ${pm(68 * 0.35, 0).x} ${pm(0, 0).y} A ${(9 / 68) * fw} ${(9 / 68) * fw} 0 0 0 ${pm(68 * 0.65, 0).x} ${pm(0, 0).y}`}
-            fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth={1} />
-          {/* Area grande: y 36-52.5, x 13.84-54.16 */}
-          <rect x={pm(13.84, 36).x} y={pm(13.84, 36).y}
-            width={pm(54.16, 36).x - pm(13.84, 36).x}
-            height={pm(0, 52.5).y - pm(0, 36).y} {...ls} fill="rgba(0,0,0,0.05)" />
-          {/* Area piccola */}
-          <rect x={pm(24.84, 46).x} y={pm(24.84, 46).y}
-            width={pm(43.16, 46).x - pm(24.84, 46).x}
-            height={pm(0, 52.5).y - pm(0, 46).y} {...ls} />
-          {/* Porta */}
-          <rect x={pm(27.84, 52.5).x} y={pm(27.84, 52.5).y}
-            width={pm(40.16, 52.5).x - pm(27.84, 52.5).x} height={9}
-            fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.7)" strokeWidth={1.5} />
-          {/* Punto rigore */}
-          <circle cx={pm(34, 41).x} cy={pm(34, 41).y} r={2.5} fill="rgba(255,255,255,0.65)" />
+          {isBalloni ? balloniField : vidswapField}
           {filtered.map((d, i) => marker(d, i))}
         </svg>
       </div>
 
-      {/* Legenda */}
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11, color: '#64748B', justifyContent: 'center' }}>
-        {legendItems.map(([col, label]) => (
-          <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <svg width={10} height={10}><circle cx={5} cy={5} r={5} fill={col} /></svg>{label}
-          </span>
-        ))}
-      </div>
+      {shotSymbolLegend || (
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11, color: '#64748B', justifyContent: 'center' }}>
+          {legendItems.map(([col, label]) => (
+            <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <svg width={10} height={10}><circle cx={5} cy={5} r={5} fill={col} /></svg>{label}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -374,12 +519,15 @@ export default function PartitaPage() {
 
   const [partita,          setPartita]          = useState(null)
   const [aggregati,        setAggregati]        = useState([])
+  const [hasGiocatori,     setHasGiocatori]     = useState(false)
   const [loading,          setLoading]          = useState(true)
   const [tab,              setTab]              = useState('sintesi')
   const [tipiCoordinate,   setTipiCoordinate]   = useState([])
   const [mappaEventType,   setMappaEventType]   = useState(null)
   const [mappaData,        setMappaData]        = useState([])
   const [mappaLoading,     setMappaLoading]     = useState(false)
+  const [giocatoriData,    setGiocatoriData]    = useState([])
+  const [giocatoriLoaded,  setGiocatoriLoaded]  = useState(false)
 
   useEffect(() => {
     if (!match_name || !userReady) return
@@ -389,6 +537,7 @@ export default function PartitaPage() {
     ]).then(([report, tipi]) => {
       setPartita(report.partita)
       setAggregati(report.aggregati || [])
+      setHasGiocatori(report.has_giocatori || false)
       const ts = tipi.tipi || []
       setTipiCoordinate(ts)
       if (ts.length > 0) setMappaEventType(ts.includes('shot') ? 'shot' : ts[0])
@@ -413,6 +562,14 @@ export default function PartitaPage() {
       .then(res => { setMappaData(res.data || []); setMappaLoading(false) })
       .catch(() => setMappaLoading(false))
   }, [mappaEventType, match_name, tenant, userReady])
+
+  // Fetch giocatori — lazy, solo quando si apre il tab
+  useEffect(() => {
+    if (tab !== 'giocatori' || giocatoriLoaded || !match_name || !userReady) return
+    fetchAPI(`/v2/analytics/${tenant}/giocatori/${match_name}`)
+      .then(res => { setGiocatoriData(res.data || []); setGiocatoriLoaded(true) })
+      .catch(() => setGiocatoriLoaded(true))
+  }, [tab, match_name, tenant, userReady, giocatoriLoaded])
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
@@ -442,6 +599,7 @@ export default function PartitaPage() {
     ...(eventiPresenti.has('passaggi')                              ? ['passaggi']      : []),
     ...(eventiPresenti.has('cross') || eventiPresenti.has('lanci')  ? ['cross & lanci'] : []),
     ...(eventiPresenti.has('duelli') || eventiPresenti.has('dribbling') || eventiPresenti.has('palle recuperate') ? ['duelli'] : []),
+    ...(hasGiocatori                                                 ? ['giocatori']     : []),
   ]
 
   // Helper aggregati
@@ -585,7 +743,7 @@ export default function PartitaPage() {
               {mappaLoading ? (
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Caricamento...</div>
               ) : (
-                <MappaCampoV2 data={mappaData} eventType={mappaEventType} teamA={teamA} teamB={teamB} />
+                <MappaCampoV2 data={mappaData} eventType={mappaEventType} teamA={teamA} teamB={teamB} sourceFormat={partita?.source_format} />
               )}
             </>
           )}
@@ -704,6 +862,105 @@ export default function PartitaPage() {
           </div>
         </Section>
       )}
+
+      {tab === 'giocatori' && (
+        <Section title="Statistiche Giocatori">
+          {!giocatoriLoaded ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Caricamento...</div>
+          ) : (
+            <GiocatoriTab data={giocatoriData} homeTeam={teamA} awayTeam={teamB} />
+          )}
+        </Section>
+      )}
+    </div>
+  )
+}
+
+
+function GiocatoriTab({ data, homeTeam, awayTeam }) {
+  const norm = t => (t || '').toLowerCase().trim()
+
+  // Tipi evento presenti nei dati
+  const eventTypes = [...new Set(data.flatMap(p => Object.keys(p.events)))].sort()
+
+  // Colonne sub per ogni event_type
+  const subCols = {
+    shot:     [['tot','totale'],['gol','gol'],['sp.','in_porta'],['mut.','murato'],['f.','fuori']],
+    cross:    [['tot','totale'],['rius.','riuscito'],['resp.','respinto']],
+    freekick: [['tot','totale']],
+    corner:   [['tot','totale']],
+    gkout:    [['tot','totale']],
+  }
+  const getCols = et => subCols[et] || [['tot','totale']]
+
+  const renderTable = (players, color) => {
+    if (players.length === 0) return <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Nessun dato</div>
+    return (
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid var(--border)' }}>
+              <th rowSpan={2} style={{ padding: '0.4rem 0.6rem', textAlign: 'left', color, fontFamily: 'var(--font-display)', letterSpacing: '0.06em', fontSize: '0.75rem' }}>#</th>
+              {eventTypes.map(et => (
+                <th key={et} colSpan={getCols(et).length}
+                  style={{ padding: '0.3rem 0.4rem', textAlign: 'center', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.65rem', borderLeft: '1px solid var(--border)' }}>
+                  {et}
+                </th>
+              ))}
+            </tr>
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              {eventTypes.flatMap(et => getCols(et).map(([label], ci) => (
+                <th key={et+label} style={{ padding: '0.25rem 0.4rem', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 500, fontSize: '0.65rem', borderLeft: ci === 0 ? '1px solid var(--border)' : 'none' }}>
+                  {label}
+                </th>
+              )))}
+            </tr>
+          </thead>
+          <tbody>
+            {players.map(p => (
+              <tr key={p.player} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                <td style={{ padding: '0.4rem 0.6rem', color, fontFamily: 'var(--font-display)', fontWeight: 700 }}>{p.player}</td>
+                {eventTypes.flatMap(et => getCols(et).map(([label, field], ci) => {
+                  const val = p.events[et]?.[field] ?? 0
+                  const isGoal = field === 'gol' && val > 0
+                  return (
+                    <td key={et+label} style={{
+                      padding: '0.4rem 0.5rem', textAlign: 'right',
+                      color: isGoal ? '#EF4444' : val > 0 ? 'var(--text)' : 'var(--text-muted)',
+                      fontWeight: isGoal ? 700 : val > 0 ? 500 : 400,
+                      borderLeft: ci === 0 ? '1px solid var(--border)' : 'none',
+                    }}>
+                      {val > 0 ? val : <span style={{ opacity: 0.3 }}>—</span>}
+                    </td>
+                  )
+                }))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
+  const homePlayers = data.filter(p => norm(p.team) === norm(homeTeam))
+    .sort((a, b) => (parseInt(a.player) || 99) - (parseInt(b.player) || 99))
+  const awayPlayers = data.filter(p => norm(p.team) !== norm(homeTeam))
+    .sort((a, b) => (parseInt(a.player) || 99) - (parseInt(b.player) || 99))
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      <div>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.9rem', fontWeight: 700, color: COLOR_HOME, marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          {homeTeam}
+        </div>
+        {renderTable(homePlayers, COLOR_HOME)}
+      </div>
+      <div>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.9rem', fontWeight: 700, color: COLOR_AWAY, marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          {awayTeam}
+        </div>
+        {renderTable(awayPlayers, COLOR_AWAY)}
+      </div>
     </div>
   )
 }

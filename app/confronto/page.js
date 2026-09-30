@@ -5,12 +5,11 @@ import { getUser } from '../../lib/auth'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 // Etichetta leggibile per le barre
-// BAR_LABELS viene costruito dinamicamente in base all'evento selezionato
-const getBarLabels = (evento) => ({
-  home_tot:  `${evento} Casa`,
-  away_tot:  `${evento} Ospite`,
-  home_comp: `Completati Casa`,
-  away_comp: `Completati Ospite`,
+const getBarLabels = (evento, noi, avv) => ({
+  home_tot:  `${evento} ${noi}`,
+  away_tot:  `${evento} ${avv}`,
+  home_comp: `Completati ${noi}`,
+  away_comp: `Completati ${avv}`,
 })
 
 const BAR_COLORS = {
@@ -31,6 +30,7 @@ export default function ConfrontoPage() {
   const [data,                 setData]                 = useState([])
   const [partite,              setPartite]              = useState([])
   const [loading,              setLoading]              = useState(false)
+  const [tenantTeam,           setTenantTeam]           = useState(null)
 
   useEffect(() => {
     const u = getUser()
@@ -58,7 +58,19 @@ export default function ConfrontoPage() {
   useEffect(() => {
     if (!tenant) return
     fetchAPI(`/upload/v2/partite?tenant=${tenant}`)
-      .then(res => setPartite(res.data || []))
+      .then(res => {
+        const ps = res.data || []
+        setPartite(ps)
+        if (ps.length > 0) {
+          const counts = {}
+          ps.forEach(p => {
+            if (p.home_team) counts[p.home_team] = (counts[p.home_team] || 0) + 1
+            if (p.away_team) counts[p.away_team] = (counts[p.away_team] || 0) + 1
+          })
+          const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || null
+          setTenantTeam(top)
+        }
+      })
       .catch(() => setPartite([]))
   }, [tenant])
 
@@ -87,23 +99,20 @@ export default function ConfrontoPage() {
       .catch(err => { console.error(err); setLoading(false) })
   }, [tenant, evento])
 
-  // Team del tenant — derivato dalla prima partita
-  const tenantTeam = partite[0]?.home_team || tenant
-
   // Categorie disponibili e filtraggio
   const categorieDisponibili = [...new Set(partite.map(p => p.category).filter(Boolean))].sort()
   const partiteFiltrate = categoria ? partite.filter(p => p.category === categoria) : partite
   const matchNamesFiltrati = new Set(partiteFiltrate.map(p => p.match_name))
   const dataFiltrati = categoria ? data.filter(d => matchNamesFiltrati.has(d.match_name)) : data
-  const BAR_LABELS = getBarLabels(evento.charAt(0).toUpperCase() + evento.slice(1))
+  const teamNoi = tenantTeam || tenant
+  const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
+  const BAR_LABELS = getBarLabels(evento.charAt(0).toUpperCase() + evento.slice(1), cap(teamNoi), 'Avversario')
 
   // Mappa match_name → label e squadre
   const partiteMap = {}
   partite.forEach(p => {
     const home = p.home_team || ''
     const away = p.away_team || ''
-    // Capitalizza prima lettera
-    const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
     partiteMap[p.match_name] = {
       label:     `${cap(home)} vs ${cap(away)}`,
       home_team: home,
@@ -126,7 +135,8 @@ export default function ConfrontoPage() {
       if (!row?.extra) return null
       const keys = Object.keys(row.extra)
       // trova chiave tenant e avversario
-      const homeKey = keys.find(k => k.includes(tenantTeam.split(' ')[0]))
+      const tt = tenantTeam || tenant
+      const homeKey = keys.find(k => k.includes(tt.split(' ')[0]))
       const awayKey = keys.find(k => k !== homeKey)
       return {
         partita:   label,
@@ -137,8 +147,9 @@ export default function ConfrontoPage() {
       }
     } else {
       // eventi normali con team
-      const homeRow = rows.find(r => r.team === tenantTeam)
-      const awayRow = rows.find(r => r.team !== tenantTeam)
+      const tt = tenantTeam || tenant
+      const homeRow = rows.find(r => r.team === tt)
+      const awayRow = rows.find(r => r.team !== tt)
       return {
         partita:   label,
         home_tot:  homeRow?.totale      ?? 0,
@@ -237,7 +248,7 @@ export default function ConfrontoPage() {
           {evento.toUpperCase()} — TUTTE LE PARTITE
         </h2>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem' }}>
-          <span style={{ color: '#00E5FF' }}>■</span> {tenantTeam} &nbsp;
+          <span style={{ color: '#00E5FF' }}>■</span> {cap(teamNoi)} &nbsp;
           <span style={{ color: '#CC44FF' }}>■</span> Avversario
         </p>
         {loading ? (
@@ -286,7 +297,7 @@ export default function ConfrontoPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {['Partita', 'Tenant Tot.', 'Avvers. Tot.', 'Tenant Comp.', 'Avvers. Comp.', 'Tenant %', 'Avvers. %'].map(h => (
+                {['Partita', `${cap(teamNoi)} Tot.`, 'Avvers. Tot.', `${cap(teamNoi)} Comp.`, 'Avvers. Comp.', `${cap(teamNoi)} %`, 'Avvers. %'].map(h => (
                   <th key={h} style={{ padding: '0.5rem', textAlign: h === 'Partita' ? 'left' : 'right', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.7rem' }}>{h}</th>
                 ))}
               </tr>
