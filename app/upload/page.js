@@ -201,7 +201,7 @@ export default function UploadPage() {
           <div>
             <label style={labelStyle}>Organizzazione (Tenant)</label>
             <div style={{...inputStyle, color: 'var(--text-muted)', cursor: 'default'}}>
-              {tenant ? tenant.charAt(0).toUpperCase() + tenant.slice(1) : '—'}
+              {tenant || '—'}
             </div>
           </div>
           <div>
