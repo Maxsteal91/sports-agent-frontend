@@ -19,7 +19,15 @@ export default function UploadPage() {
   const [loadingPartite, setLoadingPartite] = useState(false)
   const [deletingMatch,  setDeletingMatch]  = useState(null)
   const [user, setUser] = useState(null)
-  const fileInputRef = useRef(null)
+  const fileInputRef     = useRef(null)
+
+  // Rosa
+  const [rosaMatchName,  setRosaMatchName]  = useState('')
+  const [rosaFile,       setRosaFile]       = useState(null)
+  const [rosaLoading,    setRosaLoading]    = useState(false)
+  const [rosaResult,     setRosaResult]     = useState(null)
+  const [rosaError,      setRosaError]      = useState(null)
+  const rosaFileInputRef = useRef(null)
 
   useEffect(() => {
     const u = getUser()
@@ -327,6 +335,88 @@ export default function UploadPage() {
           }}
         >
           {loading ? 'CARICAMENTO IN CORSO...' : 'CARICA PARTITA'}
+        </button>
+      </div>
+
+      {/* Carica Rosa */}
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem', marginBottom: '1.5rem' }}>
+        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem', fontWeight: 600, letterSpacing: '0.08em', color: 'var(--text)', textTransform: 'uppercase', marginBottom: '1rem' }}>
+          CARICA ROSA
+        </h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem' }}>
+          Carica il file Excel con N° e Nome per associare i nomi ai numeri di maglia
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+          <div>
+            <label style={labelStyle}>Partita</label>
+            <select
+              value={rosaMatchName}
+              onChange={e => setRosaMatchName(e.target.value)}
+              style={selectStyle}
+            >
+              <option value="">— seleziona partita —</option>
+              {partite.map(p => (
+                <option key={p.match_name} value={p.match_name}>{p.match_name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>File Excel (.xlsx)</label>
+            <div
+              onClick={() => rosaFileInputRef.current?.click()}
+              style={{
+                ...inputStyle, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem',
+                color: rosaFile ? '#10B981' : 'var(--text-muted)',
+                border: `1px solid ${rosaFile ? 'rgba(16,185,129,0.4)' : 'var(--border)'}`,
+              }}
+            >
+              <input ref={rosaFileInputRef} type="file" accept=".xlsx,.xls" onChange={e => { setRosaFile(e.target.files[0]); setRosaError(null) }} style={{ display: 'none' }} />
+              {rosaFile ? `✅ ${rosaFile.name}` : '📋 Clicca per selezionare...'}
+            </div>
+          </div>
+        </div>
+
+        {rosaError && (
+          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '0.6rem 1rem', marginBottom: '0.75rem', color: '#EF4444', fontSize: '0.85rem' }}>
+            ❌ {rosaError}
+          </div>
+        )}
+        {rosaResult && (
+          <div style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', padding: '0.6rem 1rem', marginBottom: '0.75rem', color: '#10B981', fontSize: '0.85rem', fontFamily: 'var(--font-display)' }}>
+            ✅ Rosa caricata — {rosaResult.inserted} giocatori per {rosaResult.match_name}
+          </div>
+        )}
+
+        <button
+          disabled={rosaLoading || !rosaMatchName || !rosaFile}
+          onClick={async () => {
+            setRosaLoading(true); setRosaResult(null); setRosaError(null)
+            try {
+              const fd = new FormData()
+              fd.append('file', rosaFile)
+              const token = getToken()
+              const res = await fetch(`/api/upload/v2/rosa?tenant=${tenant}&match_name=${rosaMatchName}`, {
+                method: 'POST',
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                body: fd,
+              })
+              if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Errore upload rosa') }
+              const data = await res.json()
+              setRosaResult(data); setRosaFile(null)
+              if (rosaFileInputRef.current) rosaFileInputRef.current.value = ''
+            } catch (e) { setRosaError(e.message) }
+            finally { setRosaLoading(false) }
+          }}
+          style={{
+            padding: '0.7rem 2rem', borderRadius: '8px', border: 'none',
+            background: rosaLoading || !rosaMatchName || !rosaFile ? 'rgba(0,229,255,0.1)' : 'var(--primary)',
+            color: rosaLoading || !rosaMatchName || !rosaFile ? 'var(--text-muted)' : '#0A0E1A',
+            cursor: rosaLoading || !rosaMatchName || !rosaFile ? 'not-allowed' : 'pointer',
+            fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.08em',
+          }}
+        >
+          {rosaLoading ? 'CARICAMENTO...' : 'CARICA ROSA'}
         </button>
       </div>
 
