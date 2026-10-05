@@ -10,7 +10,7 @@ function NavBar() {
   const router   = useRouter()
   const pathname = usePathname()
   const [user, setUser] = useState(null)
-  const { tenant, setTenant, allTenants } = useTenant()
+  const { tenant, setTenant, allTenants, categoria, setCategoria, categorieDisponibili } = useTenant()
 
   useEffect(() => {
     if (pathname === '/login') return
@@ -76,6 +76,40 @@ function NavBar() {
             textTransform: 'uppercase',
           }}>
             {tenant.toUpperCase()}
+          </span>
+        )}
+
+        {/* Selettore categoria — admin e manager, se ci sono più categorie */}
+        {user?.role !== 'viewer' && categorieDisponibili.length > 1 && (
+          <select
+            value={categoria || ''}
+            onChange={e => setCategoria(e.target.value || null)}
+            style={{
+              padding: '0.3rem 0.7rem', borderRadius: 8,
+              background: categoria ? 'rgba(139,92,246,0.1)' : 'rgba(0,229,255,0.04)',
+              border: `1px solid ${categoria ? 'rgba(139,92,246,0.5)' : 'rgba(0,229,255,0.2)'}`,
+              color: categoria ? '#A78BFA' : 'var(--text-muted)', fontSize: '0.8rem', cursor: 'pointer',
+              fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+            }}
+          >
+            <option value="">Tutte</option>
+            {categorieDisponibili.map(c => (
+              <option key={c} value={c}>{c.toUpperCase()}</option>
+            ))}
+          </select>
+        )}
+
+        {/* Categoria fissa per viewer */}
+        {user?.role === 'viewer' && categoria && (
+          <span style={{
+            padding: '0.3rem 0.7rem', borderRadius: 8,
+            background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)',
+            color: '#A78BFA', fontSize: '0.8rem',
+            fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.05em',
+            textTransform: 'uppercase',
+          }}>
+            {categoria.toUpperCase()}
           </span>
         )}
       </div>

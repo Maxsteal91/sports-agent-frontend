@@ -8,35 +8,26 @@ import { useTenant } from '../../lib/TenantContext'
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '—'
 
 export default function PartitePage() {
-  const { tenant, ready }      = useTenant()
-  const [user,                 setUser]                 = useState(null)
-  const [categoria,            setCategoria]            = useState(null)
-  const [categorieDisponibili, setCategorieDisponibili] = useState([])
-  const [partite,              setPartite]              = useState([])
-  const [goalMap,              setGoalMap]              = useState({})
-  const [orderDate,            setOrderDate]            = useState('desc')
-  const [loading,              setLoading]              = useState(true)
+  const { tenant, ready, categoria } = useTenant()
+  const [user,      setUser]     = useState(null)
+  const [partite,   setPartite]  = useState([])
+  const [goalMap,   setGoalMap]  = useState({})
+  const [orderDate, setOrderDate] = useState('desc')
+  const [loading,   setLoading]  = useState(true)
 
-  useEffect(() => {
-    const u = getUser()
-    setUser(u)
-    if (u?.role === 'manager' && u?.categoria) setCategoria(u.categoria)
-  }, [])
+  useEffect(() => { setUser(getUser()) }, [])
 
   useEffect(() => {
     if (!tenant || !ready) return
     setLoading(true)
 
-    const viewerCatParam = user?.role === 'viewer' && user?.categoria
-      ? `&category=${user.categoria}` : ''
+    const catParam = categoria ? `&category=${categoria}` : ''
 
     Promise.all([
-      fetchAPI(`/upload/v2/partite?tenant=${tenant}${viewerCatParam}&order=${orderDate}`),
+      fetchAPI(`/upload/v2/partite?tenant=${tenant}${catParam}&order=${orderDate}`),
       fetchAPI(`/v2/analytics/${tenant}/aggregati?event_type=shot&period=Totale`),
     ]).then(([partiteRes, tiriRes]) => {
       const allPs = partiteRes.data || []
-      const cats  = [...new Set(allPs.map(p => p.category).filter(Boolean))].sort()
-      setCategorieDisponibili(cats)
       setPartite(allPs)
 
       // Calcola goal per partita e per squadra dagli aggregati
@@ -49,11 +40,10 @@ export default function PartitePage() {
       setGoalMap(gm)
       setLoading(false)
     }).catch(() => setLoading(false))
-  }, [tenant, ready, user, orderDate])
+  }, [tenant, ready, categoria, orderDate])
 
-  const partiteFiltrate = categoria
-    ? partite.filter(p => p.category === categoria)
-    : partite
+  // Il filtro categoria è già applicato lato API tramite catParam
+  const partiteFiltrate = partite
 
   const formatDate = d => d
     ? new Date(d).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -78,28 +68,11 @@ export default function PartitePage() {
             PARTITE
           </h1>
           <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-            {partiteFiltrate.length} partite {categoria ? `— ${categoria}` : ''}
+            {partiteFiltrate.length} partite{categoria ? ` — ${categoria.toUpperCase()}` : ''}
           </p>
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {user?.role !== 'viewer' && categorieDisponibili.length > 1 && (
-            <select
-              value={categoria || ''}
-              onChange={e => setCategoria(e.target.value || null)}
-              style={{
-                background: 'var(--bg-card)', border: `1px solid ${categoria ? '#8B5CF6' : 'var(--border)'}`,
-                borderRadius: '8px', padding: '0.5rem 1rem',
-                color: categoria ? '#A78BFA' : 'var(--text-muted)',
-                fontSize: '0.85rem', fontFamily: 'var(--font-display)',
-                fontWeight: 600, letterSpacing: '0.06em', cursor: 'pointer', appearance: 'none',
-              }}
-            >
-              <option value="">Tutte le categorie</option>
-              {categorieDisponibili.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          )}
-
           <button
             onClick={() => setOrderDate(o => o === 'desc' ? 'asc' : 'desc')}
             style={{
