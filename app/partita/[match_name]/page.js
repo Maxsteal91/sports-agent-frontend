@@ -878,8 +878,8 @@ export default function PartitaPage() {
 
 
 const SUB_COLS_FALLBACK = {
-  shot:     [['tot','totale'],['gol','gol'],['sp.','in_porta'],['mut.','murato'],['f.','fuori'],['area','in_area'],['f.area','fuori_area']],
-  cross:    [['tot','totale'],['rius.','riuscito'],['resp.','respinto'],['area','in_area'],['f.area','fuori_area']],
+  shot:     [['tot','totale'],['gol','gol'],['sp.','in_porta'],['mut.','murato'],['f.','fuori'],['area','in_area'],['f.area','fuori_area'],['dx','destro'],['sx','sinistro'],['↑','testa']],
+  cross:    [['tot','totale'],['rius.','riuscito'],['resp.','respinto'],['area','in_area'],['f.area','fuori_area'],['dx','destro'],['sx','sinistro']],
   freekick: [['tot','totale']],
   corner:   [['tot','totale']],
   gkout:    [['tot','totale']],

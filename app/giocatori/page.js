@@ -7,8 +7,8 @@ const COLOR_HOME = '#00E5FF'
 
 // Fallback statici usati solo se il backend non risponde
 const SUB_COLS_DEFAULT = {
-  shot:     [['Tot','totale'],['Gol','gol'],['In porta','in_porta'],['Murato','murato'],['Fuori','fuori'],['Palo','palo_traversa'],['In area','in_area'],['Fuori area','fuori_area']],
-  cross:    [['Tot','totale'],['Riusciti','riuscito'],['Respinti','respinto'],['In area','in_area'],['Fuori area','fuori_area']],
+  shot:     [['Tot','totale'],['Gol','gol'],['In porta','in_porta'],['Murato','murato'],['Fuori','fuori'],['Palo','palo_traversa'],['In area','in_area'],['Fuori area','fuori_area'],['Destro','destro'],['Sinistro','sinistro'],['Testa','testa']],
+  cross:    [['Tot','totale'],['Riusciti','riuscito'],['Respinti','respinto'],['In area','in_area'],['Fuori area','fuori_area'],['Destro','destro'],['Sinistro','sinistro']],
   freekick: [['Tot','totale']],
   corner:   [['Tot','totale']],
   gkout:    [['Tot','totale']],
