@@ -21,8 +21,8 @@ function NavBar() {
   const handleLogout = () => { clearAuth(); router.push('/login') }
 
   const navLinks = [
-    { href: '/',          label: 'Dashboard' },
-    { href: '/confronto', label: 'Confronto' },
+    { href: '/',          label: 'Squadra' },
+    { href: '/partite',   label: 'Partite' },
     { href: '/giocatori', label: 'Giocatori' },
     { href: '/chat',      label: 'AI Chat' },
     { href: '/upload',    label: 'Upload' },
