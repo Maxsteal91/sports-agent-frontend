@@ -16,6 +16,7 @@ export default function HomePage() {
   const [kpis,                 setKpis]                 = useState(null)
   const [eventiChart,          setEventiChart]          = useState([])
   const [loading,              setLoading]              = useState(true)
+  const [orderDate,            setOrderDate]            = useState('desc')
 
   // Leggi utente loggato e imposta tenant/categoria
   useEffect(() => {
@@ -51,7 +52,7 @@ export default function HomePage() {
 
     Promise.all([
       // Lista partite v2 — sempre tutte per poter derivare le categorie disponibili
-      fetchAPI(`/upload/v2/partite?tenant=${tenant}${viewerCatParam}`),
+      fetchAPI(`/upload/v2/partite?tenant=${tenant}${viewerCatParam}&order=${orderDate}`),
       // Aggregati cross-partita per tiri (KPI principale)
       fetchAPI(`/v2/analytics/${tenant}/aggregati?event_type=shot&period=Totale`),
     ]).then(([partiteRes, tiriRes]) => {
@@ -131,7 +132,7 @@ export default function HomePage() {
       console.error(err)
       setLoading(false)
     })
-  }, [tenant, categoria, user])
+  }, [tenant, categoria, user, orderDate])
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
@@ -226,9 +227,23 @@ export default function HomePage() {
       )}
 
       {/* Lista partite */}
-      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', fontWeight: 600, letterSpacing: '0.05em', marginBottom: '1rem', color: 'var(--text)' }}>
-        PARTITE
-      </h2>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', fontWeight: 600, letterSpacing: '0.05em', color: 'var(--text)', margin: 0 }}>
+          PARTITE
+        </h2>
+        <button
+          onClick={() => setOrderDate(o => o === 'desc' ? 'asc' : 'desc')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            padding: '0.35rem 0.85rem', borderRadius: 8, cursor: 'pointer',
+            border: '1px solid var(--border)', background: 'transparent',
+            color: 'var(--text-muted)', fontSize: '0.8rem',
+            fontFamily: 'var(--font-display)', letterSpacing: '0.04em',
+          }}
+        >
+          {orderDate === 'desc' ? '↓ Più recenti' : '↑ Più vecchie'}
+        </button>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
         {partite.map((p) => (
           <Link key={p.match_name} href={`/partita/${p.match_name}?tenant=${tenant}`}>
