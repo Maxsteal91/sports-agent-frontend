@@ -10,6 +10,8 @@ import { getUser } from '../../lib/auth';
 import { useTenant } from '../../lib/TenantContext';
 
 // ─────────────────────────────────────────
+const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
+
 // DESIGN TOKENS
 // ─────────────────────────────────────────
 const T = {
@@ -657,7 +659,9 @@ export default function ChatPage() {
           <option value="">Tutte le partite</option>
           {partiteFiltrate.map(p => (
             <option key={p.match_name} value={p.match_name}>
-              {p.away_team || p.match_name}
+              {p.home_team && p.away_team
+                ? `${cap(p.home_team)} vs ${cap(p.away_team)}`
+                : p.match_name}
             </option>
           ))}
         </select>
