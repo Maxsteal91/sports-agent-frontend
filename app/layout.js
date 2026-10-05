@@ -26,7 +26,6 @@ function NavBar() {
     { href: '/giocatori', label: 'Giocatori' },
     { href: '/chat',      label: 'AI Chat' },
     { href: '/upload',    label: 'Upload' },
-    ...(user?.role === 'admin' ? [{ href: '/admin', label: 'Admin' }] : []),
   ]
 
   const isActive = (href) => href === '/' ? pathname === '/' : pathname.startsWith(href)
@@ -97,9 +96,20 @@ function NavBar() {
         ))}
       </div>
 
-      {/* Utente + logout */}
+      {/* Utente + admin + logout */}
       {user && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          {user.role === 'admin' && (
+            <Link href="/admin" style={{
+              fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 600,
+              letterSpacing: '0.05em', whiteSpace: 'nowrap', textTransform: 'uppercase',
+              color: isActive('/admin') ? 'var(--primary)' : 'var(--text-muted)',
+              borderBottom: isActive('/admin') ? '2px solid var(--primary)' : '2px solid transparent',
+              paddingBottom: 2,
+            }}>
+              Admin
+            </Link>
+          )}
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>
               {user.email}
