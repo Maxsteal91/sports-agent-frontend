@@ -44,7 +44,7 @@ function NavBar() {
           fontFamily: 'var(--font-display)', fontSize: '1.3rem', fontWeight: 700,
           color: 'var(--primary)', letterSpacing: '0.05em', whiteSpace: 'nowrap',
         }}>
-          ⚽ SPORTA ANALYTICS
+          ⚽ SPORT ANALYTICS
         </Link>
 
         {/* Selettore tenant — solo admin con più tenant */}
