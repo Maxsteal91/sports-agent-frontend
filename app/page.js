@@ -54,12 +54,19 @@ export default function SquadraPage() {
       setPartite(ps)
 
       const top = (() => {
+        // Estrae la parte base del tenant rimuovendo l'anno (es. "mazzola_2026" → "mazzola")
+        const tenantBase = tenant.replace(/_\d{4}$/, '').replace(/_/g, '')
         const counts = {}
         allPs.forEach(p => {
           if (p.home_team) counts[p.home_team] = (counts[p.home_team] || 0) + 1
           if (p.away_team) counts[p.away_team] = (counts[p.away_team] || 0) + 1
         })
-        return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || tenant
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1])
+        // Preferisci il team il cui nome corrisponde al tenant
+        const byName = sorted.find(([name]) =>
+          name && (name.replace(/\s/g,'').includes(tenantBase) || tenantBase.includes(name.replace(/\s/g,'')))
+        )
+        return byName?.[0] || sorted[0]?.[0] || tenant
       })()
       setTenantTeam(top)
 
