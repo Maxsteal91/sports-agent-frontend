@@ -39,45 +39,47 @@ function NavBar() {
       position: 'sticky', top: 0, zIndex: 100, backdropFilter: 'blur(10px)',
       gap: '1rem',
     }}>
-      {/* Logo */}
-      <Link href="/" style={{
-        fontFamily: 'var(--font-display)', fontSize: '1.3rem', fontWeight: 700,
-        color: 'var(--primary)', letterSpacing: '0.05em', whiteSpace: 'nowrap', flexShrink: 0,
-      }}>
-        ⚽ SPORTA
-      </Link>
+      {/* Logo + selettore tenant — gruppo sinistra */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+        <Link href="/" style={{
+          fontFamily: 'var(--font-display)', fontSize: '1.3rem', fontWeight: 700,
+          color: 'var(--primary)', letterSpacing: '0.05em', whiteSpace: 'nowrap',
+        }}>
+          ⚽ SPORTA ANALYTICS
+        </Link>
 
-      {/* Selettore tenant — solo admin con più tenant */}
-      {user?.role === 'admin' && allTenants.length > 1 && (
-        <select
-          value={tenant}
-          onChange={e => setTenant(e.target.value)}
-          style={{
-            padding: '0.3rem 0.7rem', borderRadius: 8, flexShrink: 0,
-            background: 'rgba(0,229,255,0.08)', border: '1px solid rgba(0,229,255,0.3)',
-            color: 'var(--primary)', fontSize: '0.8rem', cursor: 'pointer',
+        {/* Selettore tenant — solo admin con più tenant */}
+        {user?.role === 'admin' && allTenants.length > 1 && (
+          <select
+            value={tenant}
+            onChange={e => setTenant(e.target.value)}
+            style={{
+              padding: '0.3rem 0.7rem', borderRadius: 8,
+              background: 'rgba(0,229,255,0.08)', border: '1px solid rgba(0,229,255,0.3)',
+              color: 'var(--primary)', fontSize: '0.8rem', cursor: 'pointer',
+              fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+            }}
+          >
+            {allTenants.map(t => (
+              <option key={t} value={t}>{t.toUpperCase()}</option>
+            ))}
+          </select>
+        )}
+
+        {/* Tenant fisso per manager/viewer */}
+        {user?.role !== 'admin' && tenant && (
+          <span style={{
+            padding: '0.3rem 0.7rem', borderRadius: 8,
+            background: 'rgba(0,229,255,0.06)', border: '1px solid rgba(0,229,255,0.15)',
+            color: 'var(--primary)', fontSize: '0.8rem',
             fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.05em',
             textTransform: 'uppercase',
-          }}
-        >
-          {allTenants.map(t => (
-            <option key={t} value={t}>{t.toUpperCase()}</option>
-          ))}
-        </select>
-      )}
-
-      {/* Tenant fisso per manager/viewer */}
-      {user?.role !== 'admin' && tenant && (
-        <span style={{
-          padding: '0.3rem 0.7rem', borderRadius: 8, flexShrink: 0,
-          background: 'rgba(0,229,255,0.06)', border: '1px solid rgba(0,229,255,0.15)',
-          color: 'var(--primary)', fontSize: '0.8rem',
-          fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.05em',
-          textTransform: 'uppercase',
-        }}>
-          {tenant.toUpperCase()}
-        </span>
-      )}
+          }}>
+            {tenant.toUpperCase()}
+          </span>
+        )}
+      </div>
 
       {/* Nav links */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flex: 1, justifyContent: 'center' }}>
