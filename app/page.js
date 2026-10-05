@@ -45,8 +45,6 @@ export default function SquadraPage() {
       fetchAPI(`/v2/analytics/${tenant}/aggregati?event_type=shot&period=Totale`),
     ]).then(([partiteRes, tiriRes]) => {
       const allPs = partiteRes.data || []
-      const cats = [...new Set(allPs.map(p => p.category).filter(Boolean))].sort()
-      setCategorieDisponibili(cats)
 
       const ps = (categoria && user?.role !== 'viewer')
         ? allPs.filter(p => p.category === categoria)
@@ -54,7 +52,18 @@ export default function SquadraPage() {
       setPartite(ps)
 
       const top = (() => {
-        // Estrae la parte base del tenant rimuovendo l'anno (es. "mazzola_2026" → "mazzola")
+        // Strategia 1: il team presente nel maggior numero di partite negli aggregati è il tenant
+        const teamMatches = {}
+        ;(tiriRes.data || []).forEach(r => {
+          if (!r.team || !r.match_name) return
+          if (!teamMatches[r.team]) teamMatches[r.team] = new Set()
+          teamMatches[r.team].add(r.match_name)
+        })
+        const byFreq = Object.entries(teamMatches).sort((a, b) => b[1].size - a[1].size)
+        if (byFreq.length > 0 && byFreq[0][1].size > (byFreq[1]?.[1].size ?? 0)) {
+          return byFreq[0][0]
+        }
+        // Strategia 2 (fallback): corrispondenza nome con tenant
         const tenantBase = tenant.replace(/_\d{4}$/, '').replace(/_/g, '')
         const counts = {}
         allPs.forEach(p => {
@@ -62,7 +71,6 @@ export default function SquadraPage() {
           if (p.away_team) counts[p.away_team] = (counts[p.away_team] || 0) + 1
         })
         const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1])
-        // Preferisci il team il cui nome corrisponde al tenant
         const byName = sorted.find(([name]) =>
           name && (name.replace(/\s/g,'').includes(tenantBase) || tenantBase.includes(name.replace(/\s/g,'')))
         )
