@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { fetchAPI } from '../../lib/api'
 import { getUser } from '../../lib/auth'
+import { useTenant } from '../../lib/TenantContext'
 
 const COLOR_HOME = '#00E5FF'
 
@@ -15,9 +16,8 @@ const SUB_COLS_DEFAULT = {
 }
 
 export default function GiocatoriPage() {
+  const { tenant, ready }  = useTenant()
   const [user,              setUser]              = useState(null)
-  const [tenant,            setTenant]            = useState('')
-  const [allTenants,        setAllTenants]        = useState([])
   const [categoria,         setCategoria]         = useState(null)
   const [matchFiltro,       setMatchFiltro]       = useState(null)
   const [periodo,           setPeriodo]           = useState('Totale')
@@ -27,39 +27,25 @@ export default function GiocatoriPage() {
   const [partite,           setPartite]           = useState([])
   const [loading,           setLoading]           = useState(false)
   const [homeTeam,          setHomeTeam]          = useState(null)
-  const [colConfig,         setColConfig]          = useState({})
+  const [colConfig,         setColConfig]         = useState({})
 
   useEffect(() => {
     const u = getUser()
     setUser(u)
-    if (u?.tenant) setTenant(u.tenant)
     if (u?.role === 'manager' && u?.categoria) setCategoria(u.categoria)
-  }, [])
-
-  // Carica tenant (admin)
-  useEffect(() => {
-    const u = getUser()
-    if (u?.role !== 'admin') return
-    fetchAPI('/upload/v2/tenants')
-      .then(d => {
-        const ts = d.tenants || []
-        setAllTenants(ts)
-        if (!u?.tenant && ts.length > 0) setTenant(ts[0])
-      })
-      .catch(() => setAllTenants([]))
   }, [])
 
   // Carica column_config per il tenant
   useEffect(() => {
-    if (!tenant) return
+    if (!tenant || !ready) return
     fetchAPI(`/v2/analytics/${tenant}/column_config`)
       .then(d => setColConfig(d.config || {}))
       .catch(() => setColConfig({}))
-  }, [tenant])
+  }, [tenant, ready])
 
   // Carica partite per filtro + team name
   useEffect(() => {
-    if (!tenant) return
+    if (!tenant || !ready) return
     fetchAPI(`/upload/v2/partite?tenant=${tenant}`)
       .then(res => {
         const ps = res.data || []
@@ -140,12 +126,6 @@ export default function GiocatoriPage() {
 
         {/* Selettori */}
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {user?.role === 'admin' && (
-            <select value={tenant} onChange={e => { setTenant(e.target.value); setCategoria(null); setMatchFiltro(null) }}
-              style={selectStyle(COLOR_HOME)}>
-              {allTenants.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
-            </select>
-          )}
           {categorieDisponibili.length > 1 && (
             <select value={categoria || ''} onChange={e => { setCategoria(e.target.value || null); setMatchFiltro(null) }}
               style={selectStyle(categoria ? '#8B5CF6' : null)}>

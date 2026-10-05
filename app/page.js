@@ -3,13 +3,13 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { fetchAPI } from '../lib/api'
 import { getUser } from '../lib/auth'
+import { useTenant } from '../lib/TenantContext'
 import KpiCard from '../components/KpiCard'
 import EventiChart from '../components/EventiChart'
 
 export default function HomePage() {
+  const { tenant, ready }      = useTenant()
   const [user,                 setUser]                 = useState(null)
-  const [tenant,               setTenant]               = useState('')
-  const [allTenants,           setAllTenants]           = useState([])
   const [categoria,            setCategoria]            = useState(null)
   const [categorieDisponibili, setCategorieDisponibili] = useState([])
   const [partite,              setPartite]              = useState([])
@@ -18,32 +18,14 @@ export default function HomePage() {
   const [loading,              setLoading]              = useState(true)
   const [orderDate,            setOrderDate]            = useState('desc')
 
-  // Leggi utente loggato e imposta tenant/categoria
   useEffect(() => {
     const u = getUser()
     setUser(u)
-    if (u?.tenant) setTenant(u.tenant)
     if (u?.role === 'manager' && u?.categoria) setCategoria(u.categoria)
   }, [])
 
-  // Carica lista tenant dall'API (solo admin)
   useEffect(() => {
-    const u = getUser()
-    if (u?.role !== 'admin') return
-    fetchAPI('/upload/v2/tenants')
-      .then(data => {
-        const ts = data.tenants || []
-        setAllTenants(ts)
-        if (!u?.tenant && ts.length > 0) setTenant(ts[0])
-      })
-      .catch(() => {
-        setAllTenants(['mazzola', 'sangiovannese'])
-        if (!u?.tenant) setTenant('mazzola')
-      })
-  }, [])
-
-  useEffect(() => {
-    if (!tenant) return
+    if (!tenant || !ready) return
     setLoading(true)
 
     // Viewer è filtrato al suo tenant+categoria lato API; admin/manager filtrano client-side
@@ -132,7 +114,7 @@ export default function HomePage() {
       console.error(err)
       setLoading(false)
     })
-  }, [tenant, categoria, user, orderDate])
+  }, [tenant, categoria, user, orderDate, ready])
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
@@ -157,26 +139,6 @@ export default function HomePage() {
         </div>
 
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-
-          {/* Selettore tenant — solo admin */}
-          {user?.role === 'admin' && (
-            <select
-              value={tenant}
-              onChange={e => { setTenant(e.target.value); setCategoria(null) }}
-              style={{
-                background: 'var(--bg-card)', border: '1px solid var(--border)',
-                borderRadius: '8px', padding: '0.5rem 1rem',
-                color: 'var(--primary)', fontSize: '0.85rem',
-                fontFamily: 'var(--font-display)', fontWeight: 600,
-                letterSpacing: '0.08em', textTransform: 'uppercase',
-                cursor: 'pointer', appearance: 'none',
-              }}
-            >
-              {allTenants.map(t => (
-                <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-              ))}
-            </select>
-          )}
 
           {/* Selettore categoria — admin e manager, se ci sono più categorie */}
           {user?.role !== 'viewer' && categorieDisponibili.length > 1 && (

@@ -1,13 +1,13 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
-import { getUser } from '../../lib/auth'
-import { getToken } from '../../lib/auth'
+import { getUser, getToken } from '../../lib/auth'
+import { useTenant } from '../../lib/TenantContext'
 
 const CATEGORIES = ['prima', 'u21', 'u19', 'u17', 'u16', 'u15']
 
 export default function UploadPage() {
+  const { tenant, ready }       = useTenant()
   const [matchName,   setMatchName]   = useState('')
-  const [tenant,      setTenant]      = useState('mazzola')
   const [category,    setCategory]    = useState('prima')
   const [aliases,     setAliases]     = useState('{"San giovannese 1927":"mazzola","Sangiovannese 1927":"mazzola"}')
   const [file,        setFile]        = useState(null)
@@ -19,31 +19,11 @@ export default function UploadPage() {
   const [loadingPartite, setLoadingPartite] = useState(false)
   const [deletingMatch,  setDeletingMatch]  = useState(null)
   const [user, setUser] = useState(null)
-  const [allTenants, setAllTenants] = useState([])
   const fileInputRef = useRef(null)
 
   useEffect(() => {
     const u = getUser()
     setUser(u)
-    if (u?.tenant) setTenant(u.tenant)
-  }, [])
-
-  // Carica lista tenant dal backend
-  useEffect(() => {
-    const fetchTenants = async () => {
-      try {
-        const token = getToken()
-        const res = await fetch('/api/upload/v2/tenants', {
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-        })
-        if (!res.ok) throw new Error()
-        const data = await res.json()
-        setAllTenants(data.tenants || [])
-      } catch {
-        setAllTenants(['mazzola', 'sangiovannese'])
-      }
-    }
-    fetchTenants()
   }, [])
 
   // Carica lista partite per tenant selezionato
@@ -66,16 +46,16 @@ export default function UploadPage() {
     }
   }
 
-  const handleTenantChange = (t) => {
-    setTenant(t)
-    // Aggiorna alias default in base al tenant
-    if (t === 'mazzola') {
+  // Ricarica partite quando cambia il tenant globale
+  useEffect(() => {
+    if (!tenant || !ready) return
+    loadPartite(tenant)
+    if (tenant === 'mazzola') {
       setAliases('{"San giovannese 1927":"mazzola","Sangiovannese 1927":"mazzola"}')
     } else {
       setAliases('')
     }
-    loadPartite(t)
-  }
+  }, [tenant, ready])
 
   // Drag & drop
   const handleDrag = (e) => {
@@ -166,7 +146,7 @@ export default function UploadPage() {
   }
 
   // Carica partite al mount
-  useState(() => { loadPartite() }, [])
+  // useState errato nel codice originale — rimosso (ora gestito dall'useEffect sopra)
 
   const inputStyle = {
     width: '100%', padding: '0.75rem 1rem',
@@ -208,27 +188,13 @@ export default function UploadPage() {
         borderRadius: '12px', padding: '1.5rem', marginBottom: '1.5rem'
       }}>
 
-        {/* Riga 1: Tenant + Category */}
+        {/* Riga 1: Tenant (read-only) + Category */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
           <div>
             <label style={labelStyle}>Organizzazione (Tenant)</label>
-            {user?.role === 'admin' ? (
-              <select
-                value={tenant}
-                onChange={e => handleTenantChange(e.target.value)}
-                style={selectStyle}
-                onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                onBlur={e => e.target.style.borderColor = 'var(--border)'}
-              >
-                {allTenants.map(t => (
-                  <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-                ))}
-              </select>
-            ) : (
-              <div style={{...inputStyle, color: 'var(--text-muted)', cursor: 'default'}}>
-                {tenant.charAt(0).toUpperCase() + tenant.slice(1)}
-              </div>
-            )}
+            <div style={{...inputStyle, color: 'var(--text-muted)', cursor: 'default'}}>
+              {tenant ? tenant.charAt(0).toUpperCase() + tenant.slice(1) : '—'}
+            </div>
           </div>
           <div>
             <label style={labelStyle}>Categoria</label>

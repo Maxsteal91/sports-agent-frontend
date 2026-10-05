@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { fetchAPI, postAPI, putAPI, deleteAPI } from '../../lib/api'
 import { getUser } from '../../lib/auth'
+import { useTenant } from '../../lib/TenantContext'
 
 const CATEGORIE = ['prima', 'u21', 'u19', 'u17', 'u16', 'u15']
 const RUOLI = ['admin', 'manager', 'viewer']
@@ -356,16 +357,13 @@ function ColonneSection({ allTenants }) {
 
 // ─── Pagina Admin ────────────────────────────────────────────────
 export default function AdminPage() {
-  const router     = useRouter()
-  const [tab,      setTab]       = useState('utenti')
-  const [allTenants, setAllTenants] = useState([])
+  const router             = useRouter()
+  const { allTenants }     = useTenant()
+  const [tab,      setTab] = useState('utenti')
 
   useEffect(() => {
     const user = getUser()
     if (!user || user.role !== 'admin') { router.push('/'); return }
-    fetchAPI('/upload/v2/tenants')
-      .then(data => setAllTenants(data.tenants || []))
-      .catch(() => setAllTenants([]))
   }, [])
 
   const TABS = [

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { fetchAPI } from '../../lib/api'
 import { getUser } from '../../lib/auth'
+import { useTenant } from '../../lib/TenantContext'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 // Etichetta leggibile per le barre
@@ -20,9 +21,8 @@ const BAR_COLORS = {
 }
 
 export default function ConfrontoPage() {
+  const { tenant, ready }      = useTenant()
   const [user,                 setUser]                 = useState(null)
-  const [tenant,               setTenant]               = useState('')
-  const [allTenants,           setAllTenants]           = useState([])
   const [categoria,            setCategoria]            = useState(null)
   const [evento,               setEvento]               = useState('shot')
   const [eventiDisponibili,    setEventiDisponibili]    = useState([])
@@ -35,28 +35,11 @@ export default function ConfrontoPage() {
   useEffect(() => {
     const u = getUser()
     setUser(u)
-    if (u?.tenant) setTenant(u.tenant)
     if (u?.role === 'manager' && u?.categoria) setCategoria(u.categoria)
   }, [])
 
-  // Carica lista tenant — solo admin
   useEffect(() => {
-    const u = getUser()
-    if (u?.role !== 'admin') return
-    fetchAPI('/upload/v2/tenants')
-      .then(data => {
-        const ts = data.tenants || []
-        setAllTenants(ts)
-        if (!u?.tenant && ts.length > 0) setTenant(ts[0])
-      })
-      .catch(() => {
-        setAllTenants(['mazzola', 'sangiovannese'])
-        if (!u?.tenant) setTenant('mazzola')
-      })
-  }, [])
-
-  useEffect(() => {
-    if (!tenant) return
+    if (!tenant || !ready) return
     fetchAPI(`/upload/v2/partite?tenant=${tenant}`)
       .then(res => {
         const ps = res.data || []
@@ -72,11 +55,11 @@ export default function ConfrontoPage() {
         }
       })
       .catch(() => setPartite([]))
-  }, [tenant])
+  }, [tenant, ready])
 
   // Scopri i tipi di evento disponibili per questo tenant
   useEffect(() => {
-    if (!tenant) return
+    if (!tenant || !ready) return
     setEventiLoading(true)
     fetchAPI(`/v2/analytics/${tenant}/aggregati?period=Totale`)
       .then(res => {
@@ -89,7 +72,7 @@ export default function ConfrontoPage() {
       })
       .catch(() => setEventiDisponibili([]))
       .finally(() => setEventiLoading(false))
-  }, [tenant])
+  }, [tenant, ready])
 
   useEffect(() => {
     if (!tenant || !evento) return
@@ -180,23 +163,6 @@ export default function ConfrontoPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {user?.role === 'admin' && (
-            <select
-              value={tenant}
-              onChange={e => { setTenant(e.target.value); setCategoria(null) }}
-              style={{
-                background: 'var(--bg-card)', border: '1px solid var(--border)',
-                borderRadius: '8px', padding: '0.5rem 1rem',
-                color: 'var(--primary)', fontSize: '0.85rem',
-                fontFamily: 'var(--font-display)', fontWeight: 600,
-                letterSpacing: '0.08em', cursor: 'pointer', appearance: 'none',
-              }}
-            >
-              {allTenants.map(t => (
-                <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-              ))}
-            </select>
-          )}
           {user?.role !== 'viewer' && categorieDisponibili.length > 1 && (
             <select
               value={categoria || ''}

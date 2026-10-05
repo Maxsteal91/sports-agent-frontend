@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { postAPI, fetchAPI } from '../../lib/api';
 import { getUser } from '../../lib/auth';
+import { useTenant } from '../../lib/TenantContext';
 
 // ─────────────────────────────────────────
 // DESIGN TOKENS
@@ -487,12 +488,11 @@ export default function ChatPage() {
       sql: null,
     }
   ]);
+  const { tenant, ready }  = useTenant();
   const [input,     setInput]     = useState('');
   const [loading,   setLoading]   = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [user,       setUser]       = useState(null);
-  const [tenant,     setTenant]     = useState('');
-  const [allTenants, setAllTenants] = useState([]);
   const [categoria,  setCategoria]  = useState(null);
   const [matchName,  setMatchName]  = useState('');
   const [partite,    setPartite]    = useState([]);
@@ -503,36 +503,19 @@ export default function ChatPage() {
   useEffect(() => {
     const u = getUser();
     setUser(u);
-    if (u?.tenant) setTenant(u.tenant);
     if (u?.role === 'manager' && u?.categoria) setCategoria(u.categoria);
-  }, []);
-
-  // Carica lista tenant dall'API — solo admin
-  useEffect(() => {
-    const u = getUser();
-    if (u?.role !== 'admin') return;
-    fetchAPI('/upload/v2/tenants')
-      .then(data => {
-        const ts = data.tenants || [];
-        setAllTenants(ts);
-        if (!u?.tenant && ts.length > 0) setTenant(ts[0]);
-      })
-      .catch(() => {
-        setAllTenants(['mazzola', 'sangiovannese']);
-        if (!u?.tenant) setTenant('mazzola');
-      });
   }, []);
 
   // Carica lista partite quando cambia tenant
   useEffect(() => {
-    if (!tenant) return;
+    if (!tenant || !ready) return;
     fetchAPI(`/upload/v2/partite?tenant=${tenant}`)
       .then(res => setPartite(res.data || []))
       .catch(() => setPartite([]));
     setMatchName('');
     setCategoria(u => (getUser()?.role === 'manager' ? u : null));
     setSessionId(null);
-  }, [tenant]);
+  }, [tenant, ready]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -631,22 +614,8 @@ export default function ChatPage() {
           Analista Tattico
         </span>
 
-        {/* Selettore Tenant — solo admin */}
-        {user && user.role === 'admin' ? (
-          <select
-            value={tenant}
-            onChange={e => { setTenant(e.target.value); setMatchName(''); setSessionId(null); }}
-            style={{
-              background: T.bgInput, border: `1px solid ${T.border}`,
-              borderRadius: 6, padding: '4px 10px', fontSize: 12,
-              color: T.textPrimary, cursor: 'pointer', marginLeft: 'auto',
-            }}
-          >
-            {allTenants.map(t => (
-              <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-            ))}
-          </select>
-        ) : (
+        {/* Tenant corrente */}
+        {tenant && (
           <span style={{
             marginLeft: 'auto', fontSize: 12, color: T.textMuted,
             fontFamily: 'var(--font-display)', letterSpacing: '0.06em',
