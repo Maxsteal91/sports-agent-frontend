@@ -5,14 +5,14 @@ import { getUser } from '../../lib/auth'
 
 const COLOR_HOME = '#00E5FF'
 
-const SUB_COLS = {
-  shot:     [['Tot','totale'],['Gol','gol'],['In porta','in_porta'],['Murato','murato'],['Fuori','fuori'],['Palo','palo_traversa']],
-  cross:    [['Tot','totale'],['Riusciti','riuscito'],['Respinti','respinto']],
+// Fallback statici usati solo se il backend non risponde
+const SUB_COLS_DEFAULT = {
+  shot:     [['Tot','totale'],['Gol','gol'],['In porta','in_porta'],['Murato','murato'],['Fuori','fuori'],['Palo','palo_traversa'],['In area','in_area'],['Fuori area','fuori_area']],
+  cross:    [['Tot','totale'],['Riusciti','riuscito'],['Respinti','respinto'],['In area','in_area'],['Fuori area','fuori_area']],
   freekick: [['Tot','totale']],
   corner:   [['Tot','totale']],
   gkout:    [['Tot','totale']],
 }
-const getCols = et => SUB_COLS[et] || [['Tot','totale']]
 
 export default function GiocatoriPage() {
   const [user,              setUser]              = useState(null)
@@ -27,6 +27,7 @@ export default function GiocatoriPage() {
   const [partite,           setPartite]           = useState([])
   const [loading,           setLoading]           = useState(false)
   const [homeTeam,          setHomeTeam]          = useState(null)
+  const [colConfig,         setColConfig]          = useState({})
 
   useEffect(() => {
     const u = getUser()
@@ -47,6 +48,14 @@ export default function GiocatoriPage() {
       })
       .catch(() => setAllTenants([]))
   }, [])
+
+  // Carica column_config per il tenant
+  useEffect(() => {
+    if (!tenant) return
+    fetchAPI(`/v2/analytics/${tenant}/column_config`)
+      .then(d => setColConfig(d.config || {}))
+      .catch(() => setColConfig({}))
+  }, [tenant])
 
   // Carica partite per filtro + team name
   useEffect(() => {
@@ -99,17 +108,21 @@ export default function GiocatoriPage() {
     ? [...data].sort(byNumber)
     : data.filter(p => p.events?.[eventoTab]).sort(byNumber)
 
+  // Ricava colonne visibili per un event type dal config dinamico (fallback ai default statici)
+  const getCols = (et) => {
+    const cfg = colConfig[et]
+    if (cfg && cfg.length > 0) return cfg.filter(c => c.visibile).map(c => [c.label, c.nome])
+    return SUB_COLS_DEFAULT[et] || [['Tot', 'totale']]
+  }
+
   const cols = eventoTab && !isAll ? getCols(eventoTab) : []
 
-  // Per tab "all": colonne sintetiche per ogni evento (tot + stat chiave)
-  const ALL_COLS = {
-    shot:     [['Tiri','totale'],['Gol','gol']],
-    cross:    [['Cross','totale'],['Rius.','riuscito']],
-    freekick: [['Puniz.','totale']],
-    corner:   [['Corner','totale']],
-    gkout:    [['Uscite','totale']],
+  // Per tab "all": prima colonna (tot) + seconda colonna visibile di ogni evento
+  const getAllCols = (et) => {
+    const full = getCols(et)
+    if (full.length <= 1) return full
+    return [full[0], full[1]]
   }
-  const getAllCols = et => ALL_COLS[et] || [['Tot','totale']]
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1100px', margin: '0 auto' }}>

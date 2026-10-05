@@ -868,7 +868,7 @@ export default function PartitaPage() {
           {!giocatoriLoaded ? (
             <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Caricamento...</div>
           ) : (
-            <GiocatoriTab data={giocatoriData} homeTeam={teamA} awayTeam={teamB} />
+            <GiocatoriTab data={giocatoriData} homeTeam={teamA} awayTeam={teamB} tenant={tenant} />
           )}
         </Section>
       )}
@@ -877,21 +877,33 @@ export default function PartitaPage() {
 }
 
 
-function GiocatoriTab({ data, homeTeam, awayTeam }) {
+const SUB_COLS_FALLBACK = {
+  shot:     [['tot','totale'],['gol','gol'],['sp.','in_porta'],['mut.','murato'],['f.','fuori'],['area','in_area'],['f.area','fuori_area']],
+  cross:    [['tot','totale'],['rius.','riuscito'],['resp.','respinto'],['area','in_area'],['f.area','fuori_area']],
+  freekick: [['tot','totale']],
+  corner:   [['tot','totale']],
+  gkout:    [['tot','totale']],
+}
+
+function GiocatoriTab({ data, homeTeam, awayTeam, tenant }) {
   const norm = t => (t || '').toLowerCase().trim()
+  const [colConfig, setColConfig] = useState({})
+
+  useEffect(() => {
+    if (!tenant) return
+    fetchAPI(`/v2/analytics/${tenant}/column_config`)
+      .then(d => setColConfig(d.config || {}))
+      .catch(() => setColConfig({}))
+  }, [tenant])
 
   // Tipi evento presenti nei dati
   const eventTypes = [...new Set(data.flatMap(p => Object.keys(p.events)))].sort()
 
-  // Colonne sub per ogni event_type
-  const subCols = {
-    shot:     [['tot','totale'],['gol','gol'],['sp.','in_porta'],['mut.','murato'],['f.','fuori']],
-    cross:    [['tot','totale'],['rius.','riuscito'],['resp.','respinto']],
-    freekick: [['tot','totale']],
-    corner:   [['tot','totale']],
-    gkout:    [['tot','totale']],
+  const getCols = (et) => {
+    const cfg = colConfig[et]
+    if (cfg && cfg.length > 0) return cfg.filter(c => c.visibile).map(c => [c.label, c.nome])
+    return SUB_COLS_FALLBACK[et] || [['tot', 'totale']]
   }
-  const getCols = et => subCols[et] || [['tot','totale']]
 
   const renderTable = (players, color) => {
     if (players.length === 0) return <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Nessun dato</div>
