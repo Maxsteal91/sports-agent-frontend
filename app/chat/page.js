@@ -488,12 +488,11 @@ export default function ChatPage() {
       sql: null,
     }
   ]);
-  const { tenant, ready }  = useTenant();
+  const { tenant, ready, categoria } = useTenant();
   const [input,     setInput]     = useState('');
   const [loading,   setLoading]   = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [user,       setUser]       = useState(null);
-  const [categoria,  setCategoria]  = useState(null);
   const [matchName,  setMatchName]  = useState('');
   const [partite,    setPartite]    = useState([]);
 
@@ -501,9 +500,7 @@ export default function ChatPage() {
   const inputRef  = useRef(null);
 
   useEffect(() => {
-    const u = getUser();
-    setUser(u);
-    if (u?.role === 'manager' && u?.categoria) setCategoria(u.categoria);
+    setUser(getUser());
   }, []);
 
   // Carica lista partite quando cambia tenant
@@ -513,7 +510,6 @@ export default function ChatPage() {
       .then(res => setPartite(res.data || []))
       .catch(() => setPartite([]));
     setMatchName('');
-    setCategoria(u => (getUser()?.role === 'manager' ? u : null));
     setSessionId(null);
   }, [tenant, ready]);
 
@@ -521,7 +517,6 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const categorieDisponibili = [...new Set(partite.map(p => p.category).filter(Boolean))].sort();
   const partiteFiltrate = categoria ? partite.filter(p => p.category === categoria) : partite;
 
   const suggestions = tenant === 'mazzola' ? SUGGESTIONS_MAZZOLA : SUGGESTIONS_SANGIOVANNESE;
@@ -623,24 +618,6 @@ export default function ChatPage() {
           }}>
             {tenant}
           </span>
-        )}
-
-        {/* Selettore Categoria — admin e manager con più categorie */}
-        {user?.role !== 'viewer' && categorieDisponibili.length > 1 && (
-          <select
-            value={categoria || ''}
-            onChange={e => { setCategoria(e.target.value || null); setMatchName(''); }}
-            style={{
-              background: T.bgInput, border: `1px solid ${categoria ? '#8B5CF6' : T.border}`,
-              borderRadius: 6, padding: '4px 10px', fontSize: 12,
-              color: categoria ? '#A78BFA' : T.textMuted, cursor: 'pointer',
-            }}
-          >
-            <option value="">Tutte le categorie</option>
-            {categorieDisponibili.map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
         )}
 
         {/* Selettore Partita */}
