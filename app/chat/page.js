@@ -10,8 +10,6 @@ import { getUser } from '../../lib/auth';
 import { useTenant } from '../../lib/TenantContext';
 
 // ─────────────────────────────────────────
-const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
-
 // DESIGN TOKENS
 // ─────────────────────────────────────────
 const T = {
@@ -491,12 +489,13 @@ export default function ChatPage() {
     }
   ]);
   const { tenant, ready, categoria } = useTenant();
-  const [input,     setInput]     = useState('');
-  const [loading,   setLoading]   = useState(false);
-  const [sessionId, setSessionId] = useState(null);
-  const [user,       setUser]       = useState(null);
-  const [matchName,  setMatchName]  = useState('');
-  const [partite,    setPartite]    = useState([]);
+  const [input,       setInput]       = useState('');
+  const [loading,     setLoading]     = useState(false);
+  const [sessionId,   setSessionId]   = useState(null);
+  const [user,        setUser]        = useState(null);
+  const [matchName,   setMatchName]   = useState('');
+  const [partite,     setPartite]     = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
@@ -576,10 +575,16 @@ export default function ChatPage() {
     }
   };
 
+  const matchLabel = (p) => {
+    const c = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
+    return p.home_team && p.away_team ? `${c(p.home_team)} vs ${c(p.away_team)}` : p.match_name
+  }
+
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', height: '100vh',
+      display: 'flex', height: 'calc(100vh - 60px)',
       background: T.bg, fontFamily: 'var(--font-body, Inter, sans-serif)',
+      overflow: 'hidden',
     }}>
       <style>{`
         @keyframes pulse {
@@ -591,152 +596,186 @@ export default function ChatPage() {
         ::-webkit-scrollbar-thumb { background: ${T.border}; border-radius: 2px; }
         textarea:focus { outline: none; }
         select { appearance: none; }
+        @media (max-width: 640px) {
+          .chat-sidebar { position: absolute; z-index: 50; height: 100%; }
+        }
       `}</style>
 
-      {/* Header */}
-      <div style={{
-        borderBottom: `1px solid ${T.border}`, padding: '12px 24px',
-        display: 'flex', alignItems: 'center', gap: 12,
-        background: T.bgCard, flexShrink: 0, flexWrap: 'wrap',
+      {/* Sidebar */}
+      <div className="chat-sidebar" style={{
+        width: sidebarOpen ? 240 : 0, flexShrink: 0, overflow: 'hidden',
+        borderRight: sidebarOpen ? `1px solid ${T.border}` : 'none',
+        background: T.bgCard, display: 'flex', flexDirection: 'column',
+        transition: 'width 0.2s ease',
       }}>
-        <div style={{
-          width: 8, height: 8, borderRadius: '50%',
-          background: T.success, boxShadow: `0 0 6px ${T.success}`,
-        }} />
-        <span style={{
-          fontFamily: 'var(--font-display, "Barlow Condensed", sans-serif)',
-          fontSize: 16, fontWeight: 600, letterSpacing: '0.08em',
-          textTransform: 'uppercase', color: T.textPrimary,
-        }}>
-          Analista Tattico
-        </span>
+        <div style={{ padding: '20px 16px', overflowY: 'auto', flex: 1, minWidth: 240 }}>
 
-        {/* Tenant corrente */}
-        {tenant && (
-          <span style={{
-            marginLeft: 'auto', fontSize: 12, color: T.textMuted,
-            fontFamily: 'var(--font-display)', letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-          }}>
-            {tenant}
-          </span>
-        )}
-
-        {/* Selettore Partita */}
-        <select
-          value={matchName}
-          onChange={e => setMatchName(e.target.value)}
-          style={{
-            background: T.bgInput, border: `1px solid ${T.border}`,
-            borderRadius: 6, padding: '4px 10px', fontSize: 12,
-            color: matchName ? T.textPrimary : T.textMuted, cursor: 'pointer',
-            minWidth: 140,
-          }}
-        >
-          <option value="">Tutte le partite</option>
-          {partiteFiltrate.map(p => (
-            <option key={p.match_name} value={p.match_name}>
-              {p.home_team && p.away_team
-                ? `${cap(p.home_team)} vs ${cap(p.away_team)}`
-                : p.match_name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Messaggi */}
-      <div style={{
-        flex: 1, overflowY: 'auto', padding: '24px 24px 8px',
-        maxWidth: 800, width: '100%', margin: '0 auto', boxSizing: 'border-box',
-      }}>
-        {messages.map((msg, i) => <ChatBubble key={i} msg={msg} />)}
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Suggerimenti */}
-      {messages.length <= 2 && (
-        <div style={{
-          padding: '0 24px 12px', display: 'flex', gap: 8, flexWrap: 'wrap',
-          maxWidth: 800, width: '100%', margin: '0 auto', boxSizing: 'border-box',
-        }}>
-          {suggestions.map((s, i) => (
-            <button
-              key={i}
-              onClick={() => sendMessage(s.q)}
-              style={{
-                background: 'transparent', border: `1px solid ${T.border}`,
-                borderRadius: 20, padding: '6px 14px', fontSize: 12,
-                color: T.textMuted, cursor: 'pointer', transition: 'all 0.15s',
-                fontFamily: 'var(--font-body, Inter, sans-serif)',
-              }}
-              onMouseEnter={e => { e.target.style.borderColor = T.primary; e.target.style.color = T.primary; }}
-              onMouseLeave={e => { e.target.style.borderColor = T.border; e.target.style.color = T.textMuted; }}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Input */}
-      <div style={{
-        borderTop: `1px solid ${T.border}`, padding: '16px 24px',
-        background: T.bgCard, flexShrink: 0,
-      }}>
-        <div style={{
-          maxWidth: 800, margin: '0 auto',
-          display: 'flex', gap: 12, alignItems: 'flex-end',
-        }}>
-          <div style={{
-            flex: 1, background: T.bgInput, border: `1px solid ${T.border}`,
-            borderRadius: 12, padding: '10px 14px',
-            display: 'flex', alignItems: 'flex-end', gap: 8,
-            transition: 'border-color 0.15s',
-          }}
-            onFocusCapture={e => e.currentTarget.style.borderColor = T.primary + '88'}
-            onBlurCapture={e => e.currentTarget.style.borderColor = T.border}
-          >
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKey}
-              placeholder={tenant ? `Chiedi al ${tenant.charAt(0).toUpperCase() + tenant.slice(1)}…` : 'Fai una domanda…'}
-              rows={1}
-              style={{
-                flex: 1, background: 'transparent', border: 'none',
-                resize: 'none', fontSize: 14, color: T.textPrimary,
-                lineHeight: 1.5, fontFamily: 'var(--font-body, Inter, sans-serif)',
-                maxHeight: 120, overflowY: 'auto', caretColor: T.primary,
-              }}
-              onInput={e => {
-                e.target.style.height = 'auto';
-                e.target.style.height = e.target.scrollHeight + 'px';
-              }}
-            />
+          {/* Titolo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+              background: T.success, boxShadow: `0 0 6px ${T.success}` }} />
+            <span style={{
+              fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700,
+              letterSpacing: '0.08em', textTransform: 'uppercase', color: T.textPrimary,
+            }}>Analista Tattico</span>
           </div>
-          <button
-            onClick={() => sendMessage(input)}
-            disabled={!input.trim() || loading}
-            style={{
-              width: 44, height: 44, borderRadius: 12,
-              background: input.trim() && !loading ? T.primary : T.border,
-              border: 'none',
-              cursor: input.trim() && !loading ? 'pointer' : 'not-allowed',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'all 0.15s', flexShrink: 0,
-            }}
-          >
+
+          {/* Selettore partita */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+              textTransform: 'uppercase', color: T.textMuted, marginBottom: 8,
+              fontFamily: 'var(--font-display)',
+            }}>Partita</div>
+            <select
+              value={matchName}
+              onChange={e => setMatchName(e.target.value)}
+              style={{
+                width: '100%', background: T.bgInput,
+                border: `1px solid ${matchName ? T.primary + '88' : T.border}`,
+                borderRadius: 8, padding: '8px 10px', fontSize: 12,
+                color: matchName ? T.textPrimary : T.textMuted, cursor: 'pointer',
+                boxSizing: 'border-box',
+              }}
+            >
+              <option value="">Tutte le partite</option>
+              {partiteFiltrate.map(p => (
+                <option key={p.match_name} value={p.match_name}>{matchLabel(p)}</option>
+              ))}
+            </select>
+            {matchName && (
+              <button onClick={() => setMatchName('')} style={{
+                marginTop: 6, fontSize: 11, color: T.textMuted, background: 'none',
+                border: 'none', cursor: 'pointer', padding: 0,
+              }}>✕ Deseleziona</button>
+            )}
+          </div>
+
+          {/* Domande suggerite */}
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+              textTransform: 'uppercase', color: T.textMuted, marginBottom: 10,
+              fontFamily: 'var(--font-display)',
+            }}>Domande rapide</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {suggestions.map((s, i) => (
+                <button key={i} onClick={() => sendMessage(s.q)} style={{
+                  background: 'transparent', border: `1px solid ${T.border}`,
+                  borderRadius: 8, padding: '7px 10px', fontSize: 12,
+                  color: T.textMuted, cursor: 'pointer', textAlign: 'left',
+                  fontFamily: 'var(--font-body, Inter, sans-serif)', lineHeight: 1.4,
+                  transition: 'all 0.15s',
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = T.primary; e.currentTarget.style.color = T.primary; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.textMuted; }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Area chat */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+
+        {/* Barra superiore chat — solo toggle sidebar */}
+        <div style={{
+          borderBottom: `1px solid ${T.border}`, padding: '8px 16px',
+          display: 'flex', alignItems: 'center', gap: 10,
+          background: T.bgCard, flexShrink: 0,
+        }}>
+          <button onClick={() => setSidebarOpen(o => !o)} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: T.textMuted, padding: 4, borderRadius: 6,
+            display: 'flex', alignItems: 'center',
+          }} title={sidebarOpen ? 'Chiudi pannello' : 'Apri pannello'}>
             <svg width={18} height={18} viewBox="0 0 24 24" fill="none"
-              stroke={T.bg} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13" />
-              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="9" y1="3" x2="9" y2="21" />
             </svg>
           </button>
+          {matchName && (
+            <span style={{
+              fontSize: 11, color: T.primary, fontFamily: 'var(--font-display)',
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+            }}>
+              📌 {matchLabel(partiteFiltrate.find(p => p.match_name === matchName) || { match_name: matchName })}
+            </span>
+          )}
         </div>
-        <p style={{ textAlign: 'center', fontSize: 11, color: T.textMuted, marginTop: 8, marginBottom: 0 }}>
-          Premi Invio per inviare · Shift+Invio per andare a capo
-        </p>
+
+        {/* Messaggi */}
+        <div style={{
+          flex: 1, overflowY: 'auto', padding: '24px 24px 8px',
+          maxWidth: 800, width: '100%', margin: '0 auto', boxSizing: 'border-box',
+          alignSelf: 'center', width: '100%',
+        }}>
+          {messages.map((msg, i) => <ChatBubble key={i} msg={msg} />)}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input */}
+        <div style={{
+          borderTop: `1px solid ${T.border}`, padding: '16px 24px',
+          background: T.bgCard, flexShrink: 0,
+        }}>
+          <div style={{
+            maxWidth: 800, margin: '0 auto',
+            display: 'flex', gap: 12, alignItems: 'flex-end',
+          }}>
+            <div style={{
+              flex: 1, background: T.bgInput, border: `1px solid ${T.border}`,
+              borderRadius: 12, padding: '10px 14px',
+              display: 'flex', alignItems: 'flex-end', gap: 8,
+              transition: 'border-color 0.15s',
+            }}
+              onFocusCapture={e => e.currentTarget.style.borderColor = T.primary + '88'}
+              onBlurCapture={e => e.currentTarget.style.borderColor = T.border}
+            >
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={handleKey}
+                placeholder="Fai una domanda…"
+                rows={1}
+                style={{
+                  flex: 1, background: 'transparent', border: 'none',
+                  resize: 'none', fontSize: 14, color: T.textPrimary,
+                  lineHeight: 1.5, fontFamily: 'var(--font-body, Inter, sans-serif)',
+                  maxHeight: 120, overflowY: 'auto', caretColor: T.primary,
+                }}
+                onInput={e => {
+                  e.target.style.height = 'auto';
+                  e.target.style.height = e.target.scrollHeight + 'px';
+                }}
+              />
+            </div>
+            <button
+              onClick={() => sendMessage(input)}
+              disabled={!input.trim() || loading}
+              style={{
+                width: 44, height: 44, borderRadius: 12,
+                background: input.trim() && !loading ? T.primary : T.border,
+                border: 'none',
+                cursor: input.trim() && !loading ? 'pointer' : 'not-allowed',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.15s', flexShrink: 0,
+              }}
+            >
+              <svg width={18} height={18} viewBox="0 0 24 24" fill="none"
+                stroke={T.bg} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
+          </div>
+          <p style={{ textAlign: 'center', fontSize: 11, color: T.textMuted, marginTop: 8, marginBottom: 0 }}>
+            Invio per inviare · Shift+Invio per andare a capo
+          </p>
+        </div>
       </div>
     </div>
   );
