@@ -28,6 +28,7 @@ export default function GiocatoriPage() {
   const [loading,           setLoading]           = useState(false)
   const [homeTeam,          setHomeTeam]          = useState(null)
   const [colConfig,         setColConfig]         = useState({})
+  const [ruoloFiltro,       setRuoloFiltro]       = useState(null)
 
   useEffect(() => {
     const u = getUser()
@@ -88,11 +89,23 @@ export default function GiocatoriPage() {
   const categorieDisponibili = [...new Set(partite.map(p => p.category).filter(Boolean))].sort()
   const partiteFiltrate = categoria ? partite.filter(p => p.category === categoria) : partite
 
+  const RUOLO_ORDER = { POR: 0, DIF: 1, CEN: 2, ATT: 3 }
+  const RUOLO_COLOR = { POR: '#F59E0B', DIF: '#3B82F6', CEN: '#10B981', ATT: '#EF4444' }
+
   const isAll = eventoTab === 'all'
-  const byNumber = (a, b) => parseInt(a.player, 10) - parseInt(b.player, 10)
+  const sortPlayers = (a, b) => {
+    const ra = RUOLO_ORDER[a.ruolo] ?? 9
+    const rb = RUOLO_ORDER[b.ruolo] ?? 9
+    if (ra !== rb) return ra - rb
+    return (a.player || '').localeCompare(b.player || '')
+  }
+  const filteredByRuolo = ruoloFiltro ? data.filter(p => p.ruolo === ruoloFiltro) : data
   const playerRows = isAll
-    ? [...data].sort(byNumber)
-    : data.filter(p => p.events?.[eventoTab]).sort(byNumber)
+    ? [...filteredByRuolo].sort(sortPlayers)
+    : filteredByRuolo.filter(p => p.events?.[eventoTab]).sort(sortPlayers)
+
+  const ruoliDisponibili = [...new Set(data.map(p => p.ruolo).filter(Boolean))]
+    .sort((a, b) => (RUOLO_ORDER[a] ?? 9) - (RUOLO_ORDER[b] ?? 9))
 
   // Ricava colonne visibili per un event type dal config dinamico (fallback ai default statici)
   const getCols = (et) => {
@@ -141,6 +154,13 @@ export default function GiocatoriPage() {
               return <option key={p.match_name} value={p.match_name}>{cap(p.home_team)} vs {cap(p.away_team)}</option>
             })}
           </select>
+          {ruoliDisponibili.length > 0 && (
+            <select value={ruoloFiltro || ''} onChange={e => setRuoloFiltro(e.target.value || null)}
+              style={selectStyle(ruoloFiltro ? RUOLO_COLOR[ruoloFiltro] : null)}>
+              <option value="">Tutti i ruoli</option>
+              {ruoliDisponibili.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          )}
           <select value={periodo} onChange={e => setPeriodo(e.target.value)}
             style={selectStyle(periodo !== 'Totale' ? '#10B981' : null)}>
             <option value="Totale">Totale</option>
@@ -181,7 +201,7 @@ export default function GiocatoriPage() {
                 {isAll ? (
                   <>
                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                      <th style={thStyle('left')} rowSpan={2}>#</th>
+                      <th style={thStyle('left')} rowSpan={2}>Giocatore</th>
                       {eventTypes.map(et => (
                         <th key={et} colSpan={getAllCols(et).length}
                           style={{ ...thStyle('center'), borderLeft: '1px solid var(--border)', paddingBottom: '0.25rem', textTransform: 'capitalize' }}>
@@ -199,7 +219,7 @@ export default function GiocatoriPage() {
                   </>
                 ) : (
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    <th style={thStyle('left')}>#</th>
+                    <th style={thStyle('left')}>Giocatore</th>
                     {cols.map(([label]) => (
                       <th key={label} style={thStyle('right')}>{label}</th>
                     ))}
@@ -209,8 +229,27 @@ export default function GiocatoriPage() {
               <tbody>
                 {playerRows.map((p, i) => (
                   <tr key={p.player} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
-                    <td style={{ padding: '0.55rem 0.75rem', color: COLOR_HOME, fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1rem' }}>
-                      {p.player}
+                    <td style={{ padding: '0.55rem 0.75rem', whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        {p.ruolo && (
+                          <span style={{
+                            fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.05em',
+                            padding: '2px 6px', borderRadius: 4,
+                            background: `${RUOLO_COLOR[p.ruolo]}22`,
+                            color: RUOLO_COLOR[p.ruolo],
+                            border: `1px solid ${RUOLO_COLOR[p.ruolo]}55`,
+                            fontFamily: 'var(--font-display)',
+                          }}>{p.ruolo}</span>
+                        )}
+                        <span style={{ color: COLOR_HOME, fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem' }}>
+                          {p.player}
+                        </span>
+                        {p.anno_nascita && (
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                            {p.anno_nascita}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     {isAll
                       ? eventTypes.flatMap(et => getAllCols(et).map(([label, field], ci) => {
