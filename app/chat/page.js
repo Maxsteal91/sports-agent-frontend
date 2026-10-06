@@ -461,29 +461,40 @@ function ChatBubble({ msg }) {
 // ─────────────────────────────────────────
 // SUGGERIMENTI DINAMICI per tenant
 // ─────────────────────────────────────────
-function buildSuggestions(partite, tenant) {
+function buildSuggestions(partite, tenant, matchName) {
   const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
   const tenantBase = tenant ? tenant.replace(/_\d{4}$/, '') : tenant
-
-  // Trova la prima partita disponibile per esempi specifici
-  const first = partite[0]
-  const opp = first
-    ? cap(first.away_team !== tenantBase ? first.away_team : first.home_team)
-    : null
-
   const teamLabel = cap(tenantBase || tenant || 'squadra')
 
+  // Se è selezionata una partita specifica, usa quella per i suggerimenti contestuali
+  const ref = matchName
+    ? partite.find(p => p.match_name === matchName)
+    : partite[0]
+
+  const opp = ref
+    ? cap(ref.away_team !== tenantBase ? ref.away_team : ref.home_team)
+    : null
+
+  if (matchName && opp) {
+    // Suggerimenti specifici per la partita selezionata
+    return [
+      { label: `Tiri vs ${opp}`,       q: `Quanti tiri ha fatto il ${teamLabel} contro ${opp}?` },
+      { label: `Mappa tiri vs ${opp}`,  q: `Mostrami la mappa dei tiri del ${teamLabel} contro ${opp}` },
+      { label: `Passaggi vs ${opp}`,    q: `Mostrami i passaggi completati del ${teamLabel} contro ${opp}` },
+      { label: `Giocatori vs ${opp}`,   q: `Chi ha fatto più tiri del ${teamLabel} contro ${opp}?` },
+    ]
+  }
+
+  // Suggerimenti generali (nessuna partita selezionata)
   const base = [
     { label: 'Tiri stagione',      q: `Confronta i tiri del ${teamLabel} in tutte le partite con goal e tiri nello specchio` },
     { label: 'Passaggi stagione',  q: `Mostrami i passaggi completati del ${teamLabel} partita per partita` },
-    { label: 'Giocatori vs tutti', q: `Chi sono i giocatori con più tiri del ${teamLabel} in stagione?` },
+    { label: 'Giocatori top',      q: `Chi sono i giocatori con più tiri del ${teamLabel} in stagione?` },
   ]
-
   if (opp) {
     base.push({ label: `Tiri vs ${opp}`,  q: `Quanti tiri ha fatto il ${teamLabel} contro ${opp}?` })
     base.push({ label: `Mappa vs ${opp}`, q: `Mostrami la mappa dei tiri del ${teamLabel} contro ${opp}` })
   }
-
   return base
 }
 
@@ -524,7 +535,7 @@ export default function ChatPage() {
 
   const partiteFiltrate = categoria ? partite.filter(p => p.category === categoria) : partite;
 
-  const suggestions = buildSuggestions(partiteFiltrate, tenant);
+  const suggestions = buildSuggestions(partiteFiltrate, tenant, matchName);
 
   const sendMessage = async (text) => {
     if (!text.trim() || loading) return;
