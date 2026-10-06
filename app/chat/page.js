@@ -461,19 +461,31 @@ function ChatBubble({ msg }) {
 // ─────────────────────────────────────────
 // SUGGERIMENTI DINAMICI per tenant
 // ─────────────────────────────────────────
-const SUGGESTIONS_MAZZOLA = [
-  { label: 'Tiri vs Certaldo',    q: 'Quanti tiri ha fatto il Mazzola contro il Certaldo?' },
-  { label: 'Mappa tiri',          q: 'Mostrami la mappa dei tiri contro il Certaldo' },
-  { label: 'Tiri tutte le partite', q: 'Confronta i tiri del Mazzola in tutte le partite con goal e tiri nello specchio' },
-  { label: 'Passaggi completati', q: 'Mostrami i passaggi completati del Mazzola partita per partita' },
-];
+function buildSuggestions(partite, tenant) {
+  const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
+  const tenantBase = tenant ? tenant.replace(/_\d{4}$/, '') : tenant
 
-const SUGGESTIONS_SANGIOVANNESE = [
-  { label: 'Tiri tutte le partite', q: 'Mostrami i tiri della Sangiovannese partita per partita con goal e tiri nello specchio' },
-  { label: 'Passaggi completati',   q: 'Confronta i passaggi completati della Sangiovannese in tutte le partite' },
-  { label: 'Duelli Rondinella',     q: 'Chi ha vinto più duelli nella partita contro la Rondinella?' },
-  { label: 'Mappa tiri Rondinella', q: 'Mostrami la mappa dei tiri contro la Rondinella' },
-];
+  // Trova la prima partita disponibile per esempi specifici
+  const first = partite[0]
+  const opp = first
+    ? cap(first.away_team !== tenantBase ? first.away_team : first.home_team)
+    : null
+
+  const teamLabel = cap(tenantBase || tenant || 'squadra')
+
+  const base = [
+    { label: 'Tiri stagione',      q: `Confronta i tiri del ${teamLabel} in tutte le partite con goal e tiri nello specchio` },
+    { label: 'Passaggi stagione',  q: `Mostrami i passaggi completati del ${teamLabel} partita per partita` },
+    { label: 'Giocatori vs tutti', q: `Chi sono i giocatori con più tiri del ${teamLabel} in stagione?` },
+  ]
+
+  if (opp) {
+    base.push({ label: `Tiri vs ${opp}`,  q: `Quanti tiri ha fatto il ${teamLabel} contro ${opp}?` })
+    base.push({ label: `Mappa vs ${opp}`, q: `Mostrami la mappa dei tiri del ${teamLabel} contro ${opp}` })
+  }
+
+  return base
+}
 
 // ─────────────────────────────────────────
 // PAGINA PRINCIPALE
@@ -520,7 +532,7 @@ export default function ChatPage() {
 
   const partiteFiltrate = categoria ? partite.filter(p => p.category === categoria) : partite;
 
-  const suggestions = tenant === 'mazzola' ? SUGGESTIONS_MAZZOLA : SUGGESTIONS_SANGIOVANNESE;
+  const suggestions = buildSuggestions(partiteFiltrate, tenant);
 
   const sendMessage = async (text) => {
     if (!text.trim() || loading) return;
