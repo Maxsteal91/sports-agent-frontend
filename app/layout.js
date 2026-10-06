@@ -79,8 +79,8 @@ function NavBar() {
           </span>
         )}
 
-        {/* Selettore categoria — admin e manager, se ci sono più categorie */}
-        {user?.role !== 'viewer' && categorieDisponibili.length > 1 && (
+        {/* Selettore categoria — admin e manager */}
+        {user?.role !== 'viewer' && categorieDisponibili.length > 0 && (
           <select
             value={categoria || ''}
             onChange={e => setCategoria(e.target.value || null)}
