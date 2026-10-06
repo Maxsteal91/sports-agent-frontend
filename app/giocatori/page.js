@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { fetchAPI } from '../../lib/api'
 import { getUser } from '../../lib/auth'
 import { useTenant } from '../../lib/TenantContext'
+import * as XLSX from 'xlsx'
 
 const COLOR_HOME = '#00E5FF'
 
@@ -107,6 +108,26 @@ export default function GiocatoriPage() {
   const ruoliDisponibili = [...new Set(data.map(p => p.ruolo).filter(Boolean))]
     .sort((a, b) => (RUOLO_ORDER[a] ?? 9) - (RUOLO_ORDER[b] ?? 9))
 
+  const exportExcel = () => {
+    const allEt = eventTypes
+    const rows = [...filteredByRuolo].sort(sortPlayers).map(p => {
+      const row = { Giocatore: p.player, Ruolo: p.ruolo || '—', Anno: p.anno_nascita || '—' }
+      allEt.forEach(et => {
+        const evts = p.events?.[et]
+        if (!evts) return
+        getCols(et).forEach(([label, field]) => {
+          row[`${et} — ${label}`] = evts[field] ?? 0
+        })
+      })
+      return row
+    })
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Giocatori')
+    const suffix = matchFiltro ? `_${matchFiltro}` : ruoloFiltro ? `_${ruoloFiltro}` : ''
+    XLSX.writeFile(wb, `giocatori_${tenant}${suffix}.xlsx`)
+  }
+
   // Ricava colonne visibili per un event type dal config dinamico (fallback ai default statici)
   const getCols = (et) => {
     const cfg = colConfig[et]
@@ -167,6 +188,18 @@ export default function GiocatoriPage() {
             <option value="Primo_Tempo">Primo Tempo</option>
             <option value="Secondo_Tempo">Secondo Tempo</option>
           </select>
+          {playerRows.length > 0 && (
+            <button onClick={exportExcel} style={{
+              padding: '0.5rem 1rem', borderRadius: '8px',
+              border: '1px solid rgba(0,229,255,0.3)',
+              background: 'rgba(0,229,255,0.06)',
+              color: 'var(--primary)', cursor: 'pointer',
+              fontFamily: 'var(--font-display)', fontSize: '0.85rem',
+              fontWeight: 600, letterSpacing: '0.05em', whiteSpace: 'nowrap',
+            }}>
+              ↓ Excel
+            </button>
+          )}
         </div>
       </div>
 
