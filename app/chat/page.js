@@ -491,15 +491,7 @@ function buildSuggestions(partite, tenant) {
 // PAGINA PRINCIPALE
 // ─────────────────────────────────────────
 export default function ChatPage() {
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: 'Ciao! Sono il tuo analista tattico. Puoi chiedermi statistiche, confronti, mappe tiri o qualsiasi dato sulle partite.',
-      visualization: null,
-      data: null,
-      sql: null,
-    }
-  ]);
+  const [messages, setMessages] = useState([]);
   const { tenant, ready, categoria } = useTenant();
   const [input,       setInput]       = useState('');
   const [loading,     setLoading]     = useState(false);
