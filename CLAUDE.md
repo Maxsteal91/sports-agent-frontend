@@ -46,7 +46,11 @@ La navbar (`app/layout.js`) mostra:
 
 **`/login`** — Form email/password. Nessuna navbar.
 
-**`/`** (Squadra) — Homepage. KPI stagione (partite, tiri, goal, nello specchio, % specchio) calcolati dagli aggregati tiri. Bar chart noi vs avversario per ogni tipo evento su tutte le partite. Team detection: usa il team più frequente negli aggregati (appare in tutte le partite = il tenant); fallback su corrispondenza nome tenant. Filtro per `categoria` via `catParam`.
+**`/`** (Squadra) — Homepage con due tab:
+- **Mappa Tiri** (default): mappa cumulativa a campo intero. Sinistra = Mazzola (normalizzati ad attaccare verso sinistra), destra = avversari. Heatmap per zona + pallini individuali. Filtro periodo (Tutto / 1° Tempo / 2° Tempo). Sezione Gol sotto (segnati + subiti). Componente: `MappaStatistica`.
+- **Confronto**: bar chart noi vs avversario per ogni tipo evento su tutte le partite + tabella dettaglio.
+
+KPI stagione (partite, tiri, goal, nello specchio, % specchio) sempre visibili in cima. Team detection: usa il team più frequente negli aggregati (appare in tutte le partite = il tenant); fallback su corrispondenza nome tenant. Filtro per `categoria` via `catParam`.
 
 **`/partite`** — Lista partite con data, squadre, risultato (goal calcolati dagli aggregati), categoria. Filtro per data asc/desc. Bottone Dettaglio per ogni partita.
 
@@ -86,6 +90,7 @@ Il campo `player` nella risposta è già il nome completo (o il numero se la ros
 | `GET /v2/analytics/:tenant/giocatori/:match_name` | GET | Giocatori (per partita) |
 | `GET /v2/analytics/:tenant/report/:match_name` | GET | Partita detail |
 | `GET /v2/analytics/:tenant/mappa/:match_name?event_type=` | GET | Partita detail (mappa tiri) |
+| `GET /v2/analytics/:tenant/mappa_stagione?event_type=&category=` | GET | Squadra (mappa tiri cumulativa) |
 | `POST /v2/chat/ask` body: `{question, tenant, session_id?, match_name?}` | POST | Chat |
 
 ## Shared components (`components/`)
@@ -93,6 +98,7 @@ Il campo `player` nella risposta è già il nome completo (o il numero se la ros
 - `KpiCard` — card metrica singola
 - `EventiChart` — Recharts bar chart
 - `MappaTiri` — shot map (usato nel dettaglio partita)
+- `MappaStatistica` — mappa tiri cumulativa stagione (campo intero SVG, heatmap + gol section)
 
 ## Design system
 

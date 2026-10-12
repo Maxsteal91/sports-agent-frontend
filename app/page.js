@@ -4,6 +4,7 @@ import { fetchAPI } from '../lib/api'
 import { getUser } from '../lib/auth'
 import { useTenant } from '../lib/TenantContext'
 import KpiCard from '../components/KpiCard'
+import MappaStatistica from '../components/MappaStatistica'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 const BAR_COLORS = {
@@ -22,6 +23,13 @@ export default function SquadraPage() {
   const [kpis,        setKpis]       = useState(null)
   const [tenantTeam,  setTenantTeam] = useState(null)
   const [loadingKpi,  setLoadingKpi] = useState(true)
+
+  // Tab
+  const [activeTab, setActiveTab] = useState('mappa')
+
+  // Mappa stagione
+  const [mapData,     setMapData]     = useState([])
+  const [loadingMap,  setLoadingMap]  = useState(false)
 
   // Confronto
   const [evento,            setEvento]            = useState('shot')
@@ -93,6 +101,16 @@ export default function SquadraPage() {
       })
       setLoadingKpi(false)
     }).catch(() => setLoadingKpi(false))
+  }, [tenant, categoria, ready])
+
+  // Carica dati mappa stagione
+  useEffect(() => {
+    if (!tenant || !ready) return
+    setLoadingMap(true)
+    const catParam = categoria ? `&category=${categoria}` : ''
+    fetchAPI(`/v2/analytics/${tenant}/mappa_stagione?event_type=shot${catParam}`)
+      .then(res => { setMapData(res.data || []); setLoadingMap(false) })
+      .catch(() => setLoadingMap(false))
   }, [tenant, categoria, ready])
 
   // Carica eventi disponibili
@@ -201,86 +219,120 @@ export default function SquadraPage() {
         </div>
       )}
 
-      {/* Selettore evento */}
-      {eventiDisponibili.length > 0 && (
-        <div style={{ marginBottom: '1.25rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {eventiDisponibili.map(e => (
-            <button key={e} onClick={() => setEvento(e)} style={{
-              padding: '0.4rem 0.9rem', borderRadius: '8px',
-              border: `1px solid ${evento === e ? 'var(--primary)' : 'var(--border)'}`,
-              background: evento === e ? 'rgba(0,229,255,0.1)' : 'var(--bg-card)',
-              color: evento === e ? 'var(--primary)' : 'var(--text-muted)',
-              cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '0.85rem',
-              fontWeight: 600, letterSpacing: '0.03em', textTransform: 'capitalize',
-            }}>{e}</button>
-          ))}
-        </div>
-      )}
-
-      {/* Bar chart */}
-      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem', marginBottom: '2rem' }}>
-        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem', fontWeight: 600, letterSpacing: '0.05em', marginBottom: '0.5rem', color: 'var(--text)' }}>
-          {evento.toUpperCase()} — TUTTE LE PARTITE
-        </h2>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem' }}>
-          <span style={{ color: '#00E5FF' }}>■</span> {cap(teamNoi)} &nbsp;
-          <span style={{ color: '#CC44FF' }}>■</span> Avversario
-        </p>
-        {loadingConfronto ? (
-          <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Caricamento...</div>
-        ) : chartData.length === 0 ? (
-          <div style={{ height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nessun dato per questo evento</div>
-        ) : (
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 60 }} barCategoryGap="25%">
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="partita" tick={{ fill: '#7A8BA8', fontSize: 11 }} angle={-35} textAnchor="end" interval={0} />
-              <YAxis tick={{ fill: '#7A8BA8', fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{ background: '#111827', border: '1px solid rgba(0,229,255,0.3)', borderRadius: '8px', color: '#F0F4FF' }}
-                cursor={{ fill: 'rgba(255,255,255,0.03)' }}
-                formatter={(value, name) => [value, BAR_LABELS[name] || name]}
-              />
-              <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: 11, color: '#7A8BA8', paddingBottom: 8 }} formatter={name => BAR_LABELS[name] || name} />
-              {barKeys.map(key => <Bar key={key} dataKey={key} fill={BAR_COLORS[key]} radius={[3,3,0,0]} />)}
-            </BarChart>
-          </ResponsiveContainer>
-        )}
+      {/* Tab navigation */}
+      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0' }}>
+        {[
+          { id: 'mappa',     label: 'MAPPA TIRI' },
+          { id: 'confronto', label: 'CONFRONTO'  },
+        ].map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
+            padding: '0.55rem 1.1rem',
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontFamily: 'var(--font-display)', fontSize: '0.82rem',
+            fontWeight: 700, letterSpacing: '0.07em',
+            color: activeTab === tab.id ? 'var(--primary)' : 'var(--text-muted)',
+            borderBottom: activeTab === tab.id ? '2px solid var(--primary)' : '2px solid transparent',
+            marginBottom: '-1px', transition: 'color 0.15s',
+          }}>
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Tabella dettaglio */}
-      {chartData.length > 0 && (
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem' }}>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem', fontWeight: 600, letterSpacing: '0.05em', marginBottom: '1rem', color: 'var(--text)' }}>
-            DETTAGLIO
-          </h2>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {['Partita', `${cap(teamNoi)} Tot.`, 'Avvers. Tot.', `${cap(teamNoi)} Comp.`, 'Avvers. Comp.', `${cap(teamNoi)} %`, 'Avvers. %'].map(h => (
-                  <th key={h} style={{ padding: '0.5rem', textAlign: h === 'Partita' ? 'left' : 'right', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.7rem' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {chartData.map((row, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                  <td style={{ padding: '0.6rem 0.5rem', color: 'var(--primary)', fontFamily: 'var(--font-display)', fontSize: '0.85rem' }}>{row.partita}</td>
-                  <td style={{ padding: '0.6rem 0.5rem', textAlign: 'right', color: '#00E5FF', fontFamily: 'var(--font-display)', fontWeight: 600 }}>{row.home_tot}</td>
-                  <td style={{ padding: '0.6rem 0.5rem', textAlign: 'right', color: '#CC44FF', fontFamily: 'var(--font-display)', fontWeight: 600 }}>{row.away_tot}</td>
-                  <td style={{ padding: '0.6rem 0.5rem', textAlign: 'right', color: 'var(--text)' }}>{row.home_comp ?? '—'}</td>
-                  <td style={{ padding: '0.6rem 0.5rem', textAlign: 'right', color: 'var(--text)' }}>{row.away_comp ?? '—'}</td>
-                  <td style={{ padding: '0.6rem 0.5rem', textAlign: 'right', color: 'var(--text-muted)' }}>
-                    {row.home_tot > 0 && row.home_comp !== null ? Math.round(row.home_comp / row.home_tot * 100) + '%' : '—'}
-                  </td>
-                  <td style={{ padding: '0.6rem 0.5rem', textAlign: 'right', color: 'var(--text-muted)' }}>
-                    {row.away_tot > 0 && row.away_comp !== null ? Math.round(row.away_comp / row.away_tot * 100) + '%' : '—'}
-                  </td>
-                </tr>
+      {/* ── Tab: Mappa Tiri ── */}
+      {activeTab === 'mappa' && (
+        <MappaStatistica
+          data={mapData}
+          tenantTeam={tenantTeam}
+          loading={loadingMap}
+        />
+      )}
+
+      {/* ── Tab: Confronto ── */}
+      {activeTab === 'confronto' && (
+        <>
+          {/* Selettore evento */}
+          {eventiDisponibili.length > 0 && (
+            <div style={{ marginBottom: '1.25rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {eventiDisponibili.map(e => (
+                <button key={e} onClick={() => setEvento(e)} style={{
+                  padding: '0.4rem 0.9rem', borderRadius: '8px',
+                  border: `1px solid ${evento === e ? 'var(--primary)' : 'var(--border)'}`,
+                  background: evento === e ? 'rgba(0,229,255,0.1)' : 'var(--bg-card)',
+                  color: evento === e ? 'var(--primary)' : 'var(--text-muted)',
+                  cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '0.85rem',
+                  fontWeight: 600, letterSpacing: '0.03em', textTransform: 'capitalize',
+                }}>{e}</button>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          )}
+
+          {/* Bar chart */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem', marginBottom: '2rem' }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem', fontWeight: 600, letterSpacing: '0.05em', marginBottom: '0.5rem', color: 'var(--text)' }}>
+              {evento.toUpperCase()} — TUTTE LE PARTITE
+            </h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem' }}>
+              <span style={{ color: '#00E5FF' }}>■</span> {cap(teamNoi)} &nbsp;
+              <span style={{ color: '#CC44FF' }}>■</span> Avversario
+            </p>
+            {loadingConfronto ? (
+              <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Caricamento...</div>
+            ) : chartData.length === 0 ? (
+              <div style={{ height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nessun dato per questo evento</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 60 }} barCategoryGap="25%">
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="partita" tick={{ fill: '#7A8BA8', fontSize: 11 }} angle={-35} textAnchor="end" interval={0} />
+                  <YAxis tick={{ fill: '#7A8BA8', fontSize: 11 }} />
+                  <Tooltip
+                    contentStyle={{ background: '#111827', border: '1px solid rgba(0,229,255,0.3)', borderRadius: '8px', color: '#F0F4FF' }}
+                    cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                    formatter={(value, name) => [value, BAR_LABELS[name] || name]}
+                  />
+                  <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: 11, color: '#7A8BA8', paddingBottom: 8 }} formatter={name => BAR_LABELS[name] || name} />
+                  {barKeys.map(key => <Bar key={key} dataKey={key} fill={BAR_COLORS[key]} radius={[3,3,0,0]} />)}
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {/* Tabella dettaglio */}
+          {chartData.length > 0 && (
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem' }}>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem', fontWeight: 600, letterSpacing: '0.05em', marginBottom: '1rem', color: 'var(--text)' }}>
+                DETTAGLIO
+              </h2>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    {['Partita', `${cap(teamNoi)} Tot.`, 'Avvers. Tot.', `${cap(teamNoi)} Comp.`, 'Avvers. Comp.', `${cap(teamNoi)} %`, 'Avvers. %'].map(h => (
+                      <th key={h} style={{ padding: '0.5rem', textAlign: h === 'Partita' ? 'left' : 'right', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.7rem' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {chartData.map((row, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <td style={{ padding: '0.6rem 0.5rem', color: 'var(--primary)', fontFamily: 'var(--font-display)', fontSize: '0.85rem' }}>{row.partita}</td>
+                      <td style={{ padding: '0.6rem 0.5rem', textAlign: 'right', color: '#00E5FF', fontFamily: 'var(--font-display)', fontWeight: 600 }}>{row.home_tot}</td>
+                      <td style={{ padding: '0.6rem 0.5rem', textAlign: 'right', color: '#CC44FF', fontFamily: 'var(--font-display)', fontWeight: 600 }}>{row.away_tot}</td>
+                      <td style={{ padding: '0.6rem 0.5rem', textAlign: 'right', color: 'var(--text)' }}>{row.home_comp ?? '—'}</td>
+                      <td style={{ padding: '0.6rem 0.5rem', textAlign: 'right', color: 'var(--text)' }}>{row.away_comp ?? '—'}</td>
+                      <td style={{ padding: '0.6rem 0.5rem', textAlign: 'right', color: 'var(--text-muted)' }}>
+                        {row.home_tot > 0 && row.home_comp !== null ? Math.round(row.home_comp / row.home_tot * 100) + '%' : '—'}
+                      </td>
+                      <td style={{ padding: '0.6rem 0.5rem', textAlign: 'right', color: 'var(--text-muted)' }}>
+                        {row.away_tot > 0 && row.away_comp !== null ? Math.round(row.away_comp / row.away_tot * 100) + '%' : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
