@@ -1,13 +1,13 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { fetchAPI } from '../lib/api'
 
 // ── SVG canvas
 const W = 1000
 const H = 580
-const PX = 36   // horizontal margin (space for goals outside field lines)
-const PY = 18   // vertical margin
+const PX = 36
+const PY = 18
 
-// Map field coords (x: 0-100, y: 0-100, y=0=bottom) → SVG pixels
 const fx = x => PX + (x / 100) * (W - 2 * PX)
 const fy = y => PY + ((100 - y) / 100) * (H - 2 * PY)
 const fw = dx => (dx / 100) * (W - 2 * PX)
@@ -18,7 +18,14 @@ const PURPLE = '#CC44FF'
 const GRASS  = '#0d3d1e'
 const GRASS2 = '#0f4522'
 
-// Normalize so Mazzola attacks LEFT (x→0), opponents attack RIGHT (x→100)
+const EVENT_TYPES = [
+  { id: 'shot',     label: 'TIRI',     apiType: 'shot',     statLabel: ['Tiri fatti', 'Tiri subiti'] },
+  { id: 'gol',      label: 'GOL',      apiType: null,       statLabel: ['Gol segnati', 'Gol subiti'] },
+  { id: 'cross',    label: 'CROSS',    apiType: 'cross',    statLabel: ['Cross fatti', 'Cross subiti'] },
+  { id: 'freekick', label: 'PUNIZIONI', apiType: 'freekick', statLabel: ['Punizioni fatte', 'Punizioni subite'] },
+  { id: 'gkout',    label: 'USCITE',   apiType: 'gkout',    statLabel: ['Uscite fatte', 'Uscite avversari'] },
+]
+
 function normalizeShotsForDisplay(shots, tenantTeam) {
   const groups = new Map()
   shots.forEach(s => {
@@ -26,14 +33,11 @@ function normalizeShotsForDisplay(shots, tenantTeam) {
     if (!groups.has(key)) groups.set(key, [])
     groups.get(key).push(s)
   })
-
   const out = []
   groups.forEach(gs => {
     const isOurTeam = gs[0].team === tenantTeam
     const sorted = [...gs].map(s => s.x).sort((a, b) => a - b)
     const medianX = sorted[Math.floor(sorted.length / 2)]
-    // Mazzola → attack left (x<50): mirror if median>50
-    // Opponents → attack right (x>50): mirror if median<50
     const mirror = isOurTeam ? medianX > 50 : medianX < 50
     gs.forEach(s => out.push({
       ...s,
@@ -83,9 +87,7 @@ function GridOverlay({ shots, isLeft, color }) {
   )
 }
 
-function FieldSVG({ ourShots, theirShots, ourLabel, theirLabel }) {
-  // Penalty D arc intercept at x=17: y = 50 ± 6.9
-  // rx = fw(8.7), ry = fh(13.5) to approximate circle on non-square SVG
+function FieldSVG({ ourShots, theirShots, ourLabel }) {
   const rx = fw(8.7)
   const ry = fh(13.5)
 
@@ -94,7 +96,6 @@ function FieldSVG({ ourShots, theirShots, ourLabel, theirLabel }) {
       viewBox={`${-PX * 0.85} ${-PY} ${W + PX * 1.7} ${H + PY * 2}`}
       style={{ width: '100%', borderRadius: '10px', background: GRASS, display: 'block' }}
     >
-      {/* Grass stripes */}
       {Array.from({ length: 10 }, (_, i) => (
         <rect key={i}
           x={fx(i * 10)} y={fy(100)}
@@ -103,59 +104,41 @@ function FieldSVG({ ourShots, theirShots, ourLabel, theirLabel }) {
         />
       ))}
 
-      {/* Heat map zones */}
       <GridOverlay shots={ourShots}   isLeft={true}  color={CYAN}   />
       <GridOverlay shots={theirShots} isLeft={false} color={PURPLE} />
 
-      {/* ── Field markings ── */}
-      {/* Outer boundary */}
       <rect x={fx(0)} y={fy(100)} width={fw(100)} height={fh(100)}
         fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="2" />
-
-      {/* Center line */}
       <line x1={fx(50)} y1={fy(100)} x2={fx(50)} y2={fy(0)}
         stroke="rgba(255,255,255,0.75)" strokeWidth="2" />
-
-      {/* Center circle */}
       <ellipse cx={fx(50)} cy={fy(50)} rx={rx * 1.0} ry={ry * 0.68}
         fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" />
       <circle cx={fx(50)} cy={fy(50)} r="4" fill="rgba(255,255,255,0.6)" />
 
-      {/* LEFT penalty area */}
       <rect x={fx(0)} y={fy(79)} width={fw(17)} height={fh(58)}
         fill="none" stroke="rgba(255,255,255,0.65)" strokeWidth="1.5" />
-      {/* LEFT 6-yard box */}
       <rect x={fx(0)} y={fy(63)} width={fw(6)} height={fh(26)}
         fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1" />
-      {/* LEFT goal */}
       <rect x={fx(-3.8)} y={fy(56)} width={fw(3.8)} height={fh(12)}
         fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.85)" strokeWidth="2.5" />
-      {/* LEFT penalty spot */}
       <circle cx={fx(11)} cy={fy(50)} r="3" fill="rgba(255,255,255,0.5)" />
-      {/* LEFT penalty D */}
       <path
         d={`M ${fx(17)} ${fy(43)} A ${rx} ${ry * 0.68} 0 0 0 ${fx(17)} ${fy(57)}`}
         fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="1.5"
       />
 
-      {/* RIGHT penalty area */}
       <rect x={fx(83)} y={fy(79)} width={fw(17)} height={fh(58)}
         fill="none" stroke="rgba(255,255,255,0.65)" strokeWidth="1.5" />
-      {/* RIGHT 6-yard box */}
       <rect x={fx(94)} y={fy(63)} width={fw(6)} height={fh(26)}
         fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1" />
-      {/* RIGHT goal */}
       <rect x={fx(100)} y={fy(56)} width={fw(3.8)} height={fh(12)}
         fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.85)" strokeWidth="2.5" />
-      {/* RIGHT penalty spot */}
       <circle cx={fx(89)} cy={fy(50)} r="3" fill="rgba(255,255,255,0.5)" />
-      {/* RIGHT penalty D */}
       <path
         d={`M ${fx(83)} ${fy(43)} A ${rx} ${ry * 0.68} 0 0 1 ${fx(83)} ${fy(57)}`}
         fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="1.5"
       />
 
-      {/* ── Shot dots ── */}
       {ourShots.map((s, i) => (
         <circle key={`our-${i}`}
           cx={fx(s.x)} cy={fy(s.y)} r="5"
@@ -171,7 +154,6 @@ function FieldSVG({ ourShots, theirShots, ourLabel, theirLabel }) {
         />
       ))}
 
-      {/* Team labels */}
       <text x={fx(15)} y={fy(95)} textAnchor="middle" fontSize="18" fontWeight="700"
         fill="rgba(0,229,255,0.45)" fontFamily="var(--font-display,sans-serif)" letterSpacing="2">
         {(ourLabel || 'NOI').toUpperCase()}
@@ -190,164 +172,204 @@ function isGoal(outcome) {
 
 function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s }
 
-function GoalsSection({ ourGoals, theirGoals, ourLabel }) {
+function GoalsDetail({ events, color, label }) {
   const cols = ['partita', 'periodo', 'minuto', 'giocatore']
-  const row = (g, i) => (
-    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-      <td style={{ padding: '0.45rem 0.5rem', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
-        {g.match_name}
-      </td>
-      <td style={{ padding: '0.45rem 0.5rem', fontSize: '0.78rem', color: 'var(--text)' }}>
-        {g.period === 'Primo_Tempo' ? '1° T' : g.period === 'Secondo_Tempo' ? '2° T' : g.period}
-      </td>
-      <td style={{ padding: '0.45rem 0.5rem', fontSize: '0.78rem', color: 'var(--text)', textAlign: 'right' }}>
-        {g.minute != null ? `${g.minute}'` : '—'}
-      </td>
-      <td style={{ padding: '0.45rem 0.5rem', fontSize: '0.78rem', color: 'var(--text)' }}>
-        {g.player || '—'}
-      </td>
-    </tr>
+  return (
+    <div>
+      <h3 style={{
+        fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 700,
+        letterSpacing: '0.06em', color, marginBottom: '0.75rem',
+      }}>
+        {label} ({events.length})
+      </h3>
+      {events.length === 0
+        ? <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Nessun dato</p>
+        : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {cols.map(h => (
+                  <th key={h} style={{
+                    padding: '0.4rem 0.5rem', textAlign: h === 'minuto' ? 'right' : 'left',
+                    color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase',
+                    letterSpacing: '0.06em', fontSize: '0.68rem',
+                  }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((g, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <td style={{ padding: '0.45rem 0.5rem', color: 'var(--text-muted)', fontSize: '0.78rem' }}>{g.match_name}</td>
+                  <td style={{ padding: '0.45rem 0.5rem', fontSize: '0.78rem', color: 'var(--text)' }}>
+                    {g.period === 'Primo_Tempo' ? '1° T' : g.period === 'Secondo_Tempo' ? '2° T' : g.period}
+                  </td>
+                  <td style={{ padding: '0.45rem 0.5rem', fontSize: '0.78rem', color: 'var(--text)', textAlign: 'right' }}>
+                    {g.minute != null ? `${g.minute}'` : '—'}
+                  </td>
+                  <td style={{ padding: '0.45rem 0.5rem', fontSize: '0.78rem', color: 'var(--text)' }}>{g.player || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )
+      }
+    </div>
   )
+}
 
-  const thead = (
-    <thead>
-      <tr style={{ borderBottom: '1px solid var(--border)' }}>
-        {cols.map(h => (
-          <th key={h} style={{
-            padding: '0.4rem 0.5rem', textAlign: h === 'minuto' ? 'right' : 'left',
-            color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase',
-            letterSpacing: '0.06em', fontSize: '0.68rem',
-          }}>{h}</th>
-        ))}
-      </tr>
-    </thead>
-  )
+function StatsSection({ eventTypeId, ourEvents, theirEvents, statLabel }) {
+  if (eventTypeId === 'gol') {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+        <GoalsDetail events={ourEvents}   color={CYAN}   label={statLabel[0]} />
+        <GoalsDetail events={theirEvents} color={PURPLE} label={statLabel[1]} />
+      </div>
+    )
+  }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1.5rem' }}>
-      {/* Gol segnati */}
-      <div>
-        <h3 style={{
-          fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 700,
-          letterSpacing: '0.06em', color: CYAN, marginBottom: '0.75rem',
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+      {[
+        { count: ourEvents.length,   label: statLabel[0], color: CYAN   },
+        { count: theirEvents.length, label: statLabel[1], color: PURPLE },
+      ].map(({ count, label, color }) => (
+        <div key={label} style={{
+          background: 'rgba(255,255,255,0.03)', borderRadius: '8px',
+          padding: '1rem 1.25rem', border: `1px solid ${color}22`,
+          display: 'flex', alignItems: 'center', gap: '1rem',
         }}>
-          GOL SEGNATI ({ourGoals.length})
-        </h3>
-        {ourGoals.length === 0
-          ? <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Nessun gol registrato</p>
-          : <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              {thead}
-              <tbody>{ourGoals.map(row)}</tbody>
-            </table>
-        }
-      </div>
-      {/* Gol subiti */}
-      <div>
-        <h3 style={{
-          fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 700,
-          letterSpacing: '0.06em', color: PURPLE, marginBottom: '0.75rem',
-        }}>
-          GOL SUBITI ({theirGoals.length})
-        </h3>
-        {theirGoals.length === 0
-          ? <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Nessun gol registrato</p>
-          : <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              {thead}
-              <tbody>{theirGoals.map(row)}</tbody>
-            </table>
-        }
-      </div>
+          <span style={{
+            fontFamily: 'var(--font-display)', fontSize: '2.2rem', fontWeight: 700,
+            color, lineHeight: 1,
+          }}>{count}</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            {label}
+          </span>
+        </div>
+      ))}
     </div>
   )
 }
 
 const PERIOD_OPTS = [
-  { label: 'Tutto',      value: 'Tutto'         },
-  { label: '1° Tempo',   value: 'Primo_Tempo'   },
-  { label: '2° Tempo',   value: 'Secondo_Tempo' },
+  { label: 'Tutto',    value: 'Tutto'         },
+  { label: '1° Tempo', value: 'Primo_Tempo'   },
+  { label: '2° Tempo', value: 'Secondo_Tempo' },
 ]
 
-export default function MappaStatistica({ data, tenantTeam, loading }) {
-  const [period, setPeriod] = useState('Tutto')
+const pillStyle = (active) => ({
+  padding: '0.35rem 0.85rem', borderRadius: '8px',
+  border: `1px solid ${active ? 'var(--primary)' : 'var(--border)'}`,
+  background: active ? 'rgba(0,229,255,0.1)' : 'var(--bg-card)',
+  color: active ? 'var(--primary)' : 'var(--text-muted)',
+  cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '0.82rem',
+  fontWeight: 600, letterSpacing: '0.03em',
+})
 
-  const { ourShots, theirShots, ourGoals, theirGoals } = useMemo(() => {
-    if (!data || data.length === 0 || !tenantTeam) {
-      return { ourShots: [], theirShots: [], ourGoals: [], theirGoals: [] }
+export default function MappaStatistica({ tenant, categoria, tenantTeam }) {
+  const [eventTypeId, setEventTypeId] = useState('shot')
+  const [period,      setPeriod]      = useState('Tutto')
+  const [loading,     setLoading]     = useState(false)
+  const [data,        setData]        = useState([])
+  const cacheRef = useRef({})
+
+  const catParam = categoria ? `&category=${encodeURIComponent(categoria)}` : ''
+
+  // Clear cache when tenant/categoria changes
+  useEffect(() => {
+    cacheRef.current = {}
+    setData([])
+  }, [tenant, categoria])
+
+  // Fetch data for current event type
+  useEffect(() => {
+    if (!tenant) return
+    const et = EVENT_TYPES.find(e => e.id === eventTypeId)
+    const fetchType = et.apiType ?? 'shot'  // gol fetches shot data
+
+    if (cacheRef.current[fetchType] !== undefined) {
+      const raw = cacheRef.current[fetchType]
+      setData(eventTypeId === 'gol' ? raw.filter(s => isGoal(s.outcome)) : raw)
+      return
     }
 
-    const filtered = period === 'Tutto'
-      ? data
-      : data.filter(s => s.period === period)
+    setLoading(true)
+    fetchAPI(`/v2/analytics/${tenant}/mappa_stagione?event_type=${fetchType}${catParam}`)
+      .then(res => {
+        const raw = res.data || []
+        cacheRef.current[fetchType] = raw
+        setData(eventTypeId === 'gol' ? raw.filter(s => isGoal(s.outcome)) : raw)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [eventTypeId, tenant, categoria])
 
+  const { ourEvents, theirEvents } = useMemo(() => {
+    if (!data.length || !tenantTeam) return { ourEvents: [], theirEvents: [] }
+    const filtered = period === 'Tutto' ? data : data.filter(s => s.period === period)
     const normalized = normalizeShotsForDisplay(filtered, tenantTeam)
-    const ours  = normalized.filter(s => s.team === tenantTeam)
-    const theirs = normalized.filter(s => s.team !== tenantTeam)
-
     return {
-      ourShots:   ours,
-      theirShots: theirs,
-      ourGoals:   ours.filter(s => isGoal(s.outcome)),
-      theirGoals: theirs.filter(s => isGoal(s.outcome)),
+      ourEvents:   normalized.filter(s => s.team === tenantTeam),
+      theirEvents: normalized.filter(s => s.team !== tenantTeam),
     }
   }, [data, tenantTeam, period])
 
-  if (loading) return (
-    <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-      Caricamento mappa...
-    </div>
-  )
-
-  if (!data || data.length === 0) return (
-    <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-      Nessun dato disponibile
-    </div>
-  )
-
-  const ourLabel = tenantTeam ? cap(tenantTeam.replace(/_\d{4}$/, '')) : 'Noi'
+  const ourLabel  = tenantTeam ? cap(tenantTeam.replace(/_\d{4}$/, '')) : 'Noi'
+  const currentET = EVENT_TYPES.find(e => e.id === eventTypeId)
 
   return (
     <div>
-      {/* Period filter */}
+      {/* Event type selector */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        {EVENT_TYPES.map(et => (
+          <button key={et.id} onClick={() => setEventTypeId(et.id)} style={pillStyle(eventTypeId === et.id)}>
+            {et.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Period filter + legend */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
         {PERIOD_OPTS.map(opt => (
-          <button key={opt.value} onClick={() => setPeriod(opt.value)} style={{
-            padding: '0.35rem 0.85rem', borderRadius: '8px',
-            border: `1px solid ${period === opt.value ? 'var(--primary)' : 'var(--border)'}`,
-            background: period === opt.value ? 'rgba(0,229,255,0.1)' : 'var(--bg-card)',
-            color: period === opt.value ? 'var(--primary)' : 'var(--text-muted)',
-            cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '0.82rem',
-            fontWeight: 600, letterSpacing: '0.03em',
-          }}>
+          <button key={opt.value} onClick={() => setPeriod(opt.value)} style={pillStyle(period === opt.value)}>
             {opt.label}
           </button>
         ))}
         <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: '0.78rem', alignSelf: 'center' }}>
-          <span style={{ color: '#00E5FF' }}>■</span> {ourLabel} ({ourShots.length})&nbsp;&nbsp;
-          <span style={{ color: '#CC44FF' }}>■</span> Avversari ({theirShots.length})
+          <span style={{ color: CYAN }}>■</span> {ourLabel} ({ourEvents.length})&nbsp;&nbsp;
+          <span style={{ color: PURPLE }}>■</span> Avversari ({theirEvents.length})
         </span>
       </div>
 
       {/* Field SVG */}
-      <FieldSVG
-        ourShots={ourShots}
-        theirShots={theirShots}
-        ourLabel={ourLabel}
-        theirLabel="Avversari"
-      />
+      {loading
+        ? <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>Caricamento...</div>
+        : !data.length
+          ? <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nessun dato disponibile</div>
+          : <FieldSVG ourShots={ourEvents} theirShots={theirEvents} ourLabel={ourLabel} />
+      }
 
-      {/* Goals section */}
-      <div style={{
-        background: 'var(--bg-card)', border: '1px solid var(--border)',
-        borderRadius: '10px', padding: '1.25rem', marginTop: '1.25rem',
-      }}>
-        <h3 style={{
-          fontFamily: 'var(--font-display)', fontSize: '0.9rem', fontWeight: 700,
-          letterSpacing: '0.06em', color: 'var(--text)', marginBottom: '0.25rem',
+      {/* Stats section */}
+      {!loading && data.length > 0 && (
+        <div style={{
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          borderRadius: '10px', padding: '1.25rem', marginTop: '1.25rem',
         }}>
-          GOL
-        </h3>
-        <GoalsSection ourGoals={ourGoals} theirGoals={theirGoals} ourLabel={ourLabel} />
-      </div>
+          <h3 style={{
+            fontFamily: 'var(--font-display)', fontSize: '0.9rem', fontWeight: 700,
+            letterSpacing: '0.06em', color: 'var(--text)', marginBottom: '1rem',
+          }}>
+            {currentET.label}
+          </h3>
+          <StatsSection
+            eventTypeId={eventTypeId}
+            ourEvents={ourEvents}
+            theirEvents={theirEvents}
+            statLabel={currentET.statLabel}
+          />
+        </div>
+      )}
     </div>
   )
 }

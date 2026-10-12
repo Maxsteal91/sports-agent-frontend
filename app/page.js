@@ -29,9 +29,6 @@ export default function SquadraPage() {
   // Tab
   const [activeTab, setActiveTab] = useState('mappa')
 
-  // Mappa stagione
-  const [mapData,     setMapData]     = useState([])
-  const [loadingMap,  setLoadingMap]  = useState(false)
 
   // Confronto
   const [evento,            setEvento]            = useState('shot')
@@ -103,16 +100,6 @@ export default function SquadraPage() {
       })
       setLoadingKpi(false)
     }).catch(() => setLoadingKpi(false))
-  }, [tenant, categoria, ready])
-
-  // Carica dati mappa stagione
-  useEffect(() => {
-    if (!tenant || !ready) return
-    setLoadingMap(true)
-    const catParam = categoria ? `&category=${categoria}` : ''
-    fetchAPI(`/v2/analytics/${tenant}/mappa_stagione?event_type=shot${catParam}`)
-      .then(res => { setMapData(res.data || []); setLoadingMap(false) })
-      .catch(() => setLoadingMap(false))
   }, [tenant, categoria, ready])
 
   // Carica eventi disponibili
@@ -234,7 +221,7 @@ export default function SquadraPage() {
       {/* Tab navigation */}
       <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0' }}>
         {[
-          { id: 'mappa',     label: 'MAPPA TIRI' },
+          { id: 'mappa',     label: 'MAPPA EVENTI' },
           { id: 'confronto', label: 'CONFRONTO'  },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
@@ -254,9 +241,9 @@ export default function SquadraPage() {
       {/* ── Tab: Mappa Tiri ── */}
       {activeTab === 'mappa' && (
         <MappaStatistica
-          data={mapData}
+          tenant={tenant}
+          categoria={categoria}
           tenantTeam={tenantTeam}
-          loading={loadingMap}
         />
       )}
 
