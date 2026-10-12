@@ -8,10 +8,12 @@ import MappaStatistica from '../components/MappaStatistica'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 const BAR_COLORS = {
-  home_tot:  '#00E5FF',
-  away_tot:  '#CC44FF',
-  home_comp: 'rgba(0,229,255,0.4)',
-  away_comp: 'rgba(204,68,255,0.4)',
+  home_specchio: '#00E5FF',
+  home_altri:    'rgba(0,229,255,0.25)',
+  away_specchio: '#CC44FF',
+  away_altri:    'rgba(204,68,255,0.25)',
+  home_tot:      '#00E5FF',
+  away_tot:      '#CC44FF',
 }
 
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
@@ -172,24 +174,34 @@ export default function SquadraPage() {
     } else {
       const homeRow = rows.find(r => r.team === teamNoi)
       const awayRow = rows.find(r => r.team !== teamNoi)
+      const hComp = homeRow?.completati ?? 0
+      const aComp = awayRow?.completati ?? 0
+      const hTot  = homeRow?.totale ?? 0
+      const aTot  = awayRow?.totale ?? 0
       return {
-        partita:   info.label || mn,
-        home_tot:  homeRow?.totale     ?? 0,
-        away_tot:  awayRow?.totale     ?? 0,
-        home_comp: homeRow?.completati ?? null,
-        away_comp: awayRow?.completati ?? null,
+        partita:       info.label || mn,
+        home_tot:      hTot,
+        away_tot:      aTot,
+        home_comp:     homeRow?.completati ?? null,
+        away_comp:     awayRow?.completati ?? null,
+        home_specchio: hComp,
+        home_altri:    Math.max(hTot - hComp, 0),
+        away_specchio: aComp,
+        away_altri:    Math.max(aTot - aComp, 0),
       }
     }
   }).filter(Boolean).filter(d => d.home_tot > 0 || d.away_tot > 0)
 
   const showComp = chartData.some(d => d.home_comp !== null && d.home_comp > 0)
-  const barKeys  = showComp ? ['home_tot', 'away_tot', 'home_comp', 'away_comp'] : ['home_tot', 'away_tot']
+  const compLabel = evento === 'shot' ? 'Nello specchio' : 'Completati'
 
   const BAR_LABELS = {
-    home_tot:  `${cap(evento)} ${cap(teamNoi)}`,
-    away_tot:  `${cap(evento)} Avversario`,
-    home_comp: `Completati ${cap(teamNoi)}`,
-    away_comp: `Completati Avversario`,
+    home_tot:      `${cap(evento)} ${cap(teamNoi)}`,
+    away_tot:      `${cap(evento)} Avversario`,
+    home_specchio: `${compLabel} ${cap(teamNoi)}`,
+    home_altri:    `Altri ${cap(teamNoi)}`,
+    away_specchio: `${compLabel} Avversario`,
+    away_altri:    `Altri Avversario`,
   }
 
   return (
@@ -273,8 +285,11 @@ export default function SquadraPage() {
               {evento.toUpperCase()} — TUTTE LE PARTITE
             </h2>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem' }}>
-              <span style={{ color: '#00E5FF' }}>■</span> {cap(teamNoi)} &nbsp;
+              <span style={{ color: '#00E5FF' }}>■</span> {cap(teamNoi)}
+              {showComp && <span style={{ color: 'rgba(0,229,255,0.4)' }}> ■ {compLabel} {cap(teamNoi)}</span>}
+              &nbsp;&nbsp;
               <span style={{ color: '#CC44FF' }}>■</span> Avversario
+              {showComp && <span style={{ color: 'rgba(204,68,255,0.4)' }}> ■ {compLabel} Avversario</span>}
             </p>
             {loadingConfronto ? (
               <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Caricamento...</div>
@@ -287,12 +302,43 @@ export default function SquadraPage() {
                   <XAxis dataKey="partita" tick={{ fill: '#7A8BA8', fontSize: 11 }} angle={-35} textAnchor="end" interval={0} />
                   <YAxis tick={{ fill: '#7A8BA8', fontSize: 11 }} />
                   <Tooltip
-                    contentStyle={{ background: '#111827', border: '1px solid rgba(0,229,255,0.3)', borderRadius: '8px', color: '#F0F4FF' }}
                     cursor={{ fill: 'rgba(255,255,255,0.03)' }}
-                    formatter={(value, name) => [value, BAR_LABELS[name] || name]}
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null
+                      const hSpec = payload.find(p => p.dataKey === 'home_specchio')?.value ?? null
+                      const hAlt  = payload.find(p => p.dataKey === 'home_altri')?.value   ?? 0
+                      const aSpec = payload.find(p => p.dataKey === 'away_specchio')?.value ?? null
+                      const aAlt  = payload.find(p => p.dataKey === 'away_altri')?.value   ?? 0
+                      const hTot  = showComp ? (hSpec ?? 0) + hAlt : (payload.find(p => p.dataKey === 'home_tot')?.value ?? 0)
+                      const aTot  = showComp ? (aSpec ?? 0) + aAlt : (payload.find(p => p.dataKey === 'away_tot')?.value ?? 0)
+                      return (
+                        <div style={{ background: '#111827', border: '1px solid rgba(0,229,255,0.3)', borderRadius: '8px', padding: '0.75rem', fontSize: '0.8rem' }}>
+                          <div style={{ color: '#7A8BA8', fontSize: '0.72rem', marginBottom: '0.35rem' }}>{label}</div>
+                          <div style={{ color: '#00E5FF' }}>
+                            {cap(teamNoi)}: <strong>{hTot}</strong>
+                            {showComp && hSpec !== null && hTot > 0 && ` — ${hSpec} ${compLabel.toLowerCase()} (${Math.round(hSpec/hTot*100)}%)`}
+                          </div>
+                          <div style={{ color: '#CC44FF' }}>
+                            Avversario: <strong>{aTot}</strong>
+                            {showComp && aSpec !== null && aTot > 0 && ` — ${aSpec} ${compLabel.toLowerCase()} (${Math.round(aSpec/aTot*100)}%)`}
+                          </div>
+                        </div>
+                      )
+                    }}
                   />
-                  <Legend verticalAlign="top" align="right" wrapperStyle={{ fontSize: 11, color: '#7A8BA8', paddingBottom: 8 }} formatter={name => BAR_LABELS[name] || name} />
-                  {barKeys.map(key => <Bar key={key} dataKey={key} fill={BAR_COLORS[key]} radius={[3,3,0,0]} />)}
+                  {showComp ? (
+                    <>
+                      <Bar dataKey="home_specchio" stackId="home" fill={BAR_COLORS.home_specchio} radius={[0,0,0,0]} />
+                      <Bar dataKey="home_altri"    stackId="home" fill={BAR_COLORS.home_altri}    radius={[3,3,0,0]} />
+                      <Bar dataKey="away_specchio" stackId="away" fill={BAR_COLORS.away_specchio} radius={[0,0,0,0]} />
+                      <Bar dataKey="away_altri"    stackId="away" fill={BAR_COLORS.away_altri}    radius={[3,3,0,0]} />
+                    </>
+                  ) : (
+                    <>
+                      <Bar dataKey="home_tot" fill={BAR_COLORS.home_tot} radius={[3,3,0,0]} />
+                      <Bar dataKey="away_tot" fill={BAR_COLORS.away_tot} radius={[3,3,0,0]} />
+                    </>
+                  )}
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -307,7 +353,7 @@ export default function SquadraPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    {['Partita', `${cap(teamNoi)} Tot.`, 'Avvers. Tot.', `${cap(teamNoi)} Comp.`, 'Avvers. Comp.', `${cap(teamNoi)} %`, 'Avvers. %'].map(h => (
+                    {['Partita', `${cap(teamNoi)} Tot.`, 'Avvers. Tot.', `${cap(teamNoi)} ${showComp ? (evento === 'shot' ? 'Spec.' : 'Comp.') : '—'}`, `Avvers. ${showComp ? (evento === 'shot' ? 'Spec.' : 'Comp.') : '—'}`, `${cap(teamNoi)} %`, 'Avvers. %'].map(h => (
                       <th key={h} style={{ padding: '0.5rem', textAlign: h === 'Partita' ? 'left' : 'right', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.7rem' }}>{h}</th>
                     ))}
                   </tr>
