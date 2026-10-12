@@ -3,12 +3,12 @@ import { useState, useRef, useEffect } from 'react'
 import { getUser, getToken } from '../../lib/auth'
 import { useTenant } from '../../lib/TenantContext'
 
-const CATEGORIES = ['prima', 'u21', 'u19', 'u17', 'u16', 'u15']
+const CATEGORIES = ['eccellenza', 'coppa', 'u21', 'u19', 'u17', 'u16', 'u15']
 
 export default function UploadPage() {
   const { tenant, ready }       = useTenant()
   const [matchName,   setMatchName]   = useState('')
-  const [category,    setCategory]    = useState('prima')
+  const [category,    setCategory]    = useState('eccellenza')
   const [aliases,     setAliases]     = useState('{"San giovannese 1927":"mazzola","Sangiovannese 1927":"mazzola"}')
   const [file,        setFile]        = useState(null)
   const [dragging,    setDragging]    = useState(false)
