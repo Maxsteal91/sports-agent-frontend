@@ -34,7 +34,7 @@ The app uses JWT authentication stored in `localStorage`.
 **`lib/TenantContext.js`** — contesto globale che gestisce:
 - `tenant` / `setTenant` — tenant attivo, persistito in localStorage; default `mazzola_2026` se disponibile
 - `allTenants` — lista tenant dall'API `/auth/tenants`
-- `categoria` / `setCategoria` — categoria attiva (es. `prima`, `u19`); reset al cambio tenant
+- `categoria` / `setCategoria` — categoria attiva (es. `eccellenza`, `coppa`, `u19`); reset al cambio tenant
 - `categorieDisponibili` — categorie distinte per il tenant corrente, caricate da `GET /upload/v2/categorie?tenant=`
 
 La navbar (`app/layout.js`) mostra:
@@ -48,7 +48,7 @@ La navbar (`app/layout.js`) mostra:
 
 **`/`** (Squadra) — Homepage con due tab:
 - **Mappa Tiri** (default): mappa cumulativa a campo intero. Sinistra = Mazzola (normalizzati ad attaccare verso sinistra), destra = avversari. Heatmap per zona + pallini individuali. Filtro periodo (Tutto / 1° Tempo / 2° Tempo). Sezione Gol sotto (segnati + subiti). Componente: `MappaStatistica`.
-- **Confronto**: bar chart noi vs avversario per ogni tipo evento su tutte le partite + tabella dettaglio.
+- **Confronto**: bar chart noi vs avversario per ogni tipo evento su tutte le partite + tabella dettaglio. Usa **barre stackate** (2 per partita): porzione piena = nello specchio / completati (di cui), porzione trasparente = altri eventi. `compLabel` è dinamico: `'Nello specchio'` per `shot`, `'Completati'` per altri eventi. Fallback a barre semplici se nessun dato completati. Tooltip mostra: `"X totale — Y nello specchio (Z%)"`. Tabella: intestazione colonna `Spec.` per shot, `Comp.` per altri.
 
 KPI stagione (partite, tiri, goal, nello specchio, % specchio) sempre visibili in cima. Team detection: usa il team più frequente negli aggregati (appare in tutte le partite = il tenant); fallback su corrispondenza nome tenant. Filtro per `categoria` via `catParam`.
 
@@ -68,7 +68,7 @@ KPI stagione (partite, tiri, goal, nello specchio, % specchio) sempre visibili i
 
 **`/confronto`** — Redirect automatico a `/` (sezione Squadra).
 
-**`/admin`** — Visibile solo a `role === 'admin'`. Gestione utenti: lista, crea, modifica, attiva/disattiva, elimina. Ogni utente ha `tenant` e `categoria` opzionali.
+**`/admin`** — Visibile solo a `role === 'admin'`. Gestione utenti: lista, crea, modifica, attiva/disattiva, elimina. Ogni utente ha `tenant` e `categoria` opzionali. La costante `CATEGORIE` in `app/admin/page.js` elenca le categorie disponibili nel dropdown: `['eccellenza', 'coppa', 'u21', 'u19', 'u17', 'u16', 'u15']` — da aggiornare manualmente se si aggiungono nuove categorie.
 
 ## Giocatori — rosa e nomi
 
