@@ -5,7 +5,7 @@ import { fetchAPI, postAPI, putAPI, deleteAPI } from '../../lib/api'
 import { getUser } from '../../lib/auth'
 import { useTenant } from '../../lib/TenantContext'
 
-const CATEGORIE = ['prima', 'u21', 'u19', 'u17', 'u16', 'u15']
+const CATEGORIE = ['eccellenza', 'coppa', 'u21', 'u19', 'u17', 'u16', 'u15']
 const RUOLI = ['admin', 'manager', 'viewer']
 
 const T = {
