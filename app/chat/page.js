@@ -504,20 +504,53 @@ function buildSuggestions(partite, tenant, matchName) {
 export default function ChatPage() {
   const [messages, setMessages] = useState([]);
   const { tenant, ready, categoria } = useTenant();
-  const [input,       setInput]       = useState('');
-  const [loading,     setLoading]     = useState(false);
-  const [sessionId,   setSessionId]   = useState(null);
-  const [user,        setUser]        = useState(null);
-  const [matchName,   setMatchName]   = useState('');
-  const [partite,     setPartite]     = useState([]);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [input,        setInput]        = useState('');
+  const [loading,      setLoading]      = useState(false);
+  const [sessionId,    setSessionId]    = useState(null);
+  const [user,         setUser]         = useState(null);
+  const [matchName,    setMatchName]    = useState('');
+  const [partite,      setPartite]      = useState([]);
+  const [sidebarOpen,  setSidebarOpen]  = useState(true);
+  const [groqApiKey,   setGroqApiKey]   = useState('');
+  const [showKeyModal, setShowKeyModal] = useState(false);
+  const [keyInput,     setKeyInput]     = useState('');
+  const [keyStatus,    setKeyStatus]    = useState(null); // null | 'validating' | 'ok' | 'error'
 
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
 
   useEffect(() => {
     setUser(getUser());
+    try {
+      const saved = localStorage.getItem('groq_api_key');
+      if (saved) setGroqApiKey(saved);
+    } catch {}
   }, []);
+
+  const saveKey = async () => {
+    if (!keyInput.trim()) return;
+    setKeyStatus('validating');
+    try {
+      const res = await postAPI('/v2/chat/validate_key', { groq_api_key: keyInput.trim() });
+      if (res.valid) {
+        localStorage.setItem('groq_api_key', keyInput.trim());
+        setGroqApiKey(keyInput.trim());
+        setKeyStatus('ok');
+        setTimeout(() => { setShowKeyModal(false); setKeyStatus(null); setKeyInput(''); }, 1200);
+      } else {
+        setKeyStatus('error');
+      }
+    } catch {
+      setKeyStatus('error');
+    }
+  };
+
+  const removeKey = () => {
+    try { localStorage.removeItem('groq_api_key'); } catch {}
+    setGroqApiKey('');
+    setKeyInput('');
+    setKeyStatus(null);
+  };
 
   // Carica lista partite quando cambia tenant
   useEffect(() => {
@@ -557,7 +590,8 @@ export default function ChatPage() {
         tenant:     tenant,
         session_id: sessionId || undefined,
       };
-      if (matchName) body.match_name = matchName;
+      if (matchName)  body.match_name   = matchName;
+      if (groqApiKey) body.groq_api_key = groqApiKey;
 
       const res = await postAPI('/v2/chat/ask', body);
 
@@ -693,8 +727,112 @@ export default function ChatPage() {
               ))}
             </div>
           </div>
+
+          {/* Modello AI */}
+          <div style={{ marginTop: 24, paddingTop: 16, borderTop: `1px solid ${T.border}` }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+              textTransform: 'uppercase', color: T.textMuted, marginBottom: 8,
+              fontFamily: 'var(--font-display)',
+            }}>Modello AI</div>
+            <button onClick={() => { setKeyInput(groqApiKey); setKeyStatus(null); setShowKeyModal(true); }} style={{
+              width: '100%', padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
+              border: `1px solid ${groqApiKey ? T.success + '88' : T.border}`,
+              background: groqApiKey ? `${T.success}11` : T.bg,
+              color: groqApiKey ? T.success : T.textMuted,
+              display: 'flex', alignItems: 'center', gap: 6,
+              fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '0.05em',
+            }}>
+              <span>{groqApiKey ? '✓' : '⚙'}</span>
+              <span>{groqApiKey ? 'Chiave personale attiva' : 'Usa chiave default'}</span>
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Modale configurazione chiave Groq */}
+      {showKeyModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 200,
+          background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 16,
+        }} onClick={e => { if (e.target === e.currentTarget) setShowKeyModal(false); }}>
+          <div style={{
+            background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 14,
+            padding: '28px 28px 24px', width: '100%', maxWidth: 420,
+          }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700,
+              letterSpacing: '0.08em', color: T.textPrimary, marginBottom: 6 }}>
+              CHIAVE GROQ PERSONALE
+            </h2>
+            <p style={{ color: T.textMuted, fontSize: 12, marginBottom: 20, lineHeight: 1.6 }}>
+              Usa la tua chiave Groq gratuita invece di quella condivisa della piattaforma.
+              La chiave rimane nel tuo browser e non viene mai salvata sul server.
+            </p>
+
+            {/* Step 1: istruzioni */}
+            <div style={{ background: T.bg, borderRadius: 8, padding: '12px 14px', marginBottom: 16,
+              border: `1px solid ${T.border}`, fontSize: 12, color: T.textMuted, lineHeight: 1.7 }}>
+              <strong style={{ color: T.textPrimary, display: 'block', marginBottom: 4 }}>Come ottenere la chiave:</strong>
+              1. Vai su <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer"
+                style={{ color: T.primary, textDecoration: 'none', fontWeight: 600 }}>console.groq.com/keys</a><br/>
+              2. Crea un account gratuito (se non ce l'hai)<br/>
+              3. Clicca "Create API Key" e copiala qui sotto
+            </div>
+
+            {/* Step 2: input chiave */}
+            <input
+              type="password"
+              placeholder="gsk_..."
+              value={keyInput}
+              onChange={e => { setKeyInput(e.target.value); setKeyStatus(null); }}
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 8, marginBottom: 10,
+                border: `1px solid ${keyStatus === 'error' ? '#ef4444' : keyStatus === 'ok' ? T.success : T.border}`,
+                background: T.bg, color: T.textPrimary, fontSize: 13,
+                fontFamily: 'monospace', outline: 'none', boxSizing: 'border-box',
+              }}
+            />
+
+            {keyStatus === 'error' && (
+              <p style={{ color: '#ef4444', fontSize: 11, marginBottom: 10 }}>
+                Chiave non valida. Controlla di averla copiata correttamente.
+              </p>
+            )}
+            {keyStatus === 'ok' && (
+              <p style={{ color: T.success, fontSize: 11, marginBottom: 10 }}>
+                ✓ Chiave verificata e salvata!
+              </p>
+            )}
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={saveKey} disabled={!keyInput.trim() || keyStatus === 'validating'} style={{
+                flex: 1, padding: '10px', borderRadius: 8, cursor: 'pointer', border: 'none',
+                background: keyStatus === 'validating' ? T.border : T.primary,
+                color: '#000', fontFamily: 'var(--font-display)', fontWeight: 700,
+                fontSize: 12, letterSpacing: '0.05em',
+              }}>
+                {keyStatus === 'validating' ? 'VERIFICA...' : 'VERIFICA E SALVA'}
+              </button>
+              {groqApiKey && (
+                <button onClick={() => { removeKey(); setShowKeyModal(false); }} style={{
+                  padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
+                  border: `1px solid #ef444488`, background: 'transparent',
+                  color: '#ef4444', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 11,
+                }}>
+                  RIMUOVI
+                </button>
+              )}
+              <button onClick={() => setShowKeyModal(false)} style={{
+                padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
+                border: `1px solid ${T.border}`, background: 'transparent',
+                color: T.textMuted, fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 11,
+              }}>
+                CHIUDI
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Area chat */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
