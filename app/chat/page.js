@@ -529,6 +529,11 @@ export default function ChatPage() {
     setSessionId(null);
   }, [tenant, ready]);
 
+  // Reset match selezionata quando cambia categoria
+  useEffect(() => {
+    setMatchName('');
+  }, [categoria]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
