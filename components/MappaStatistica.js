@@ -267,9 +267,8 @@ const pillStyle = (active) => ({
   fontWeight: 600, letterSpacing: '0.03em',
 })
 
-export default function MappaStatistica({ tenant, categoria, tenantTeam }) {
-  const [eventTypeId, setEventTypeId] = useState('shot')
-  const [period,      setPeriod]      = useState('Tutto')
+export default function MappaStatistica({ tenant, categoria, tenantTeam, eventTypeId = 'shot' }) {
+  const [period, setPeriod] = useState('Tutto')
   const [loading,     setLoading]     = useState(false)
   const [data,        setData]        = useState([])
   const cacheRef = useRef({})
@@ -320,15 +319,6 @@ export default function MappaStatistica({ tenant, categoria, tenantTeam }) {
 
   return (
     <div>
-      {/* Event type selector */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        {EVENT_TYPES.map(et => (
-          <button key={et.id} onClick={() => setEventTypeId(et.id)} style={pillStyle(eventTypeId === et.id)}>
-            {et.label}
-          </button>
-        ))}
-      </div>
-
       {/* Period filter + legend */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
         {PERIOD_OPTS.map(opt => (

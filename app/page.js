@@ -27,7 +27,7 @@ export default function SquadraPage() {
   const [loadingKpi,  setLoadingKpi] = useState(true)
 
   // Tab
-  const [activeTab, setActiveTab] = useState('mappa')
+  const [activeTab, setActiveTab] = useState('shot')
 
 
   // Confronto
@@ -218,32 +218,46 @@ export default function SquadraPage() {
         </div>
       )}
 
-      {/* Tab navigation */}
-      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '0' }}>
+      {/* Navigazione flat */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
         {[
-          { id: 'mappa',     label: 'MAPPA EVENTI' },
-          { id: 'confronto', label: 'CONFRONTO'  },
-        ].map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
-            padding: '0.55rem 1.1rem',
-            background: 'none', border: 'none', cursor: 'pointer',
-            fontFamily: 'var(--font-display)', fontSize: '0.82rem',
-            fontWeight: 700, letterSpacing: '0.07em',
-            color: activeTab === tab.id ? 'var(--primary)' : 'var(--text-muted)',
-            borderBottom: activeTab === tab.id ? '2px solid var(--primary)' : '2px solid transparent',
-            marginBottom: '-1px', transition: 'color 0.15s',
+          { id: 'shot',      label: 'TIRI' },
+          { id: 'gol',       label: 'GOL' },
+          { id: 'cross',     label: 'CROSS' },
+          { id: 'freekick',  label: 'PUNIZIONI' },
+          { id: 'gkout',     label: 'USCITE' },
+        ].map(item => (
+          <button key={item.id} onClick={() => setActiveTab(item.id)} style={{
+            padding: '0.4rem 0.9rem', borderRadius: '8px', cursor: 'pointer',
+            fontFamily: 'var(--font-display)', fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.06em',
+            border: `1px solid ${activeTab === item.id ? 'var(--primary)' : 'var(--border)'}`,
+            background: activeTab === item.id ? 'rgba(0,229,255,0.1)' : 'var(--bg-card)',
+            color: activeTab === item.id ? 'var(--primary)' : 'var(--text-muted)',
+            transition: 'color 0.15s',
           }}>
-            {tab.label}
+            {item.label}
           </button>
         ))}
+        <div style={{ width: '1px', height: '24px', background: 'var(--border)', margin: '0 0.25rem' }} />
+        <button onClick={() => setActiveTab('confronto')} style={{
+          padding: '0.4rem 0.9rem', borderRadius: '8px', cursor: 'pointer',
+          fontFamily: 'var(--font-display)', fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.06em',
+          border: `1px solid ${activeTab === 'confronto' ? 'var(--accent,#FF6B35)' : 'var(--border)'}`,
+          background: activeTab === 'confronto' ? 'rgba(255,107,53,0.1)' : 'var(--bg-card)',
+          color: activeTab === 'confronto' ? 'var(--accent,#FF6B35)' : 'var(--text-muted)',
+          transition: 'color 0.15s',
+        }}>
+          CONFRONTO
+        </button>
       </div>
 
-      {/* ── Tab: Mappa Tiri ── */}
-      {activeTab === 'mappa' && (
+      {/* ── Mappa eventi ── */}
+      {activeTab !== 'confronto' && (
         <MappaStatistica
           tenant={tenant}
           categoria={categoria}
           tenantTeam={tenantTeam}
+          eventTypeId={activeTab}
         />
       )}
 
