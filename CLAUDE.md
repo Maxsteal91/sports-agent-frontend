@@ -46,29 +46,35 @@ La navbar (`app/layout.js`) mostra:
 
 **`/login`** — Form email/password. Nessuna navbar.
 
-**`/`** (Squadra) — Homepage con due tab:
-- **Mappa Tiri** (default): mappa cumulativa a campo intero. Sinistra = Mazzola (normalizzati ad attaccare verso sinistra), destra = avversari. Heatmap per zona + pallini individuali. Filtro periodo (Tutto / 1° Tempo / 2° Tempo). Sezione Gol sotto (segnati + subiti). Componente: `MappaStatistica`.
-- **Confronto**: bar chart noi vs avversario per ogni tipo evento su tutte le partite + tabella dettaglio. Usa **barre stackate** (2 per partita): porzione piena = nello specchio / completati (di cui), porzione trasparente = altri eventi. `compLabel` è dinamico: `'Nello specchio'` per `shot`, `'Completati'` per altri eventi. Fallback a barre semplici se nessun dato completati. Tooltip mostra: `"X totale — Y nello specchio (Z%)"`. Tabella: intestazione colonna `Spec.` per shot, `Comp.` per altri.
+**`/`** (Squadra) — Homepage con navigazione piatta in una singola riga di pillole:
+- **TIRI | GOL | CROSS | PUNIZIONI | USCITE** (pillole cyan) → mostrano la mappa eventi cumulativa stagione. Componente: `MappaStatistica`. GOL è derivato client-side dai tiri (outcome='gol'), gli altri chiamano `mappa_stagione?event_type=<tipo>`. Cache interna per tipo — cambio tipo non ri-scarica se già fetched.
+- **CONFRONTO** (pillola arancione, separatore visivo) → bar chart noi vs avversario per ogni tipo evento + tabella dettaglio. Barre stackate (porzione piena = nello specchio/completati, trasparente = altri). `compLabel` dinamico: `'Nello specchio'` per `shot`, `'Completati'` per altri.
 
-KPI stagione (partite, tiri, goal, nello specchio, % specchio) sempre visibili in cima. Team detection: usa il team più frequente negli aggregati (appare in tutte le partite = il tenant); fallback su corrispondenza nome tenant. Filtro per `categoria` via `catParam`.
+`MappaStatistica` ora è self-contained: gestisce il proprio fetching e riceve `eventTypeId` come prop da `page.js`. Sezione stats in basso adattiva: GOL mostra tabella dettaglio (partita/periodo/minuto/giocatore), tutti gli altri mostrano card conteggio fatti/subiti.
+
+KPI stagione (partite, tiri, goal, nello specchio, % specchio) sempre visibili in cima. Team detection: usa il team più frequente negli aggregati. Filtro per `categoria` via `catParam`.
 
 **`/partite`** — Lista partite con data, squadre, risultato (goal calcolati dagli aggregati), categoria. Filtro per data asc/desc. Bottone Dettaglio per ogni partita.
 
 **`/partita/[match_name]`** — Dettaglio partita (tab: sintesi, tiri, mappa tiri, passaggi, cross & lanci, duelli). Legge `?tenant=` da `useSearchParams`.
 
-**`/giocatori`** — Statistiche per giocatore. Ogni riga mostra: badge ruolo colorato (POR=giallo, DIF=blu, CEN=verde, ATT=rosso) + nome completo + anno di nascita. Filtri: categoria, partita, ruolo, periodo. Sort automatico per ruolo (POR→DIF→CEN→ATT) poi per nome. Bottone "↓ Excel" scarica il foglio corrente con tutti i dati via `xlsx` (SheetJS). Colonne generate da `column_config` backend con fallback statici in `SUB_COLS_DEFAULT`.
+**`/giocatori`** — Statistiche per giocatore. Ogni riga mostra: badge ruolo colorato (POR=giallo, DIF=blu, CEN=verde, ATT=rosso) + nome completo + anno di nascita. Filtri: partita, ruolo, periodo (la categoria viene dal TenantContext globale, non c'è filtro locale ridondante). Sort automatico per ruolo (POR→DIF→CEN→ATT) poi per nome. Bottone "↓ Excel" scarica il foglio corrente. Colonne generate da `column_config` backend con fallback statici in `SUB_COLS_DEFAULT`.
 
 **`/chat`** — Chatbot AI con layout a due colonne:
-- **Sidebar** (240px, sempre aperta su desktop, collassabile su mobile): titolo "Analista Tattico" con pallino verde, selettore partita (con bottone "Deseleziona"), domande rapide contestuali
+- **Sidebar** (240px, sempre aperta su desktop, collassabile su mobile): titolo "Analista Tattico" con pallino verde, selettore partita filtrato per `categoria` attiva (con bottone "Deseleziona"), domande rapide contestuali, sezione **Modello AI** in fondo
+- **Sezione Modello AI**: bottone che apre wizard modale per configurare chiave Groq personale. Chiave salvata in `localStorage` (`groq_api_key`), inviata nel body di ogni richiesta come `groq_api_key` (opzionale — se assente il backend usa la chiave dell'env). Validazione via `POST /v2/chat/validate_key` prima del salvataggio.
 - **Area chat**: messaggi, input con Invio/Shift+Invio, badge partita selezionata nella barra superiore
-- **Suggerimenti dinamici**: `buildSuggestions(partite, tenant, matchName)` — se una partita è selezionata mostra 4 domande specifiche per quella partita; altrimenti 3 domande generali + 2 sull'avversario della prima partita disponibile
-- `matchName` viene inviato nel body della richiesta; il backend enforce che il SQL generato referenzi quella partita
+- **Suggerimenti dinamici**: `buildSuggestions(partite, tenant, matchName)` — se una partita è selezionata mostra 4 domande specifiche; altrimenti 3 generali + 2 sull'avversario della prima partita
+- `matchName` inviato nel body; il backend enforce che il SQL referenzi quella partita e avvisa se la domanda riguarda una partita diversa
+- Reset automatico `matchName` al cambio `categoria`
 
 **`/upload`** — Upload VidSwap JSON. Sezione "Carica Rosa": selettore partita + file Excel/ODS con colonne `N°` e `Nome` → `POST /upload/v2/rosa`. Match name e tenant sempre in lowercase.
 
 **`/confronto`** — Redirect automatico a `/` (sezione Squadra).
 
-**`/admin`** — Visibile solo a `role === 'admin'`. Gestione utenti: lista, crea, modifica, attiva/disattiva, elimina. Ogni utente ha `tenant` e `categoria` opzionali. La costante `CATEGORIE` in `app/admin/page.js` elenca le categorie disponibili nel dropdown: `['eccellenza', 'coppa', 'u21', 'u19', 'u17', 'u16', 'u15']` — da aggiornare manualmente se si aggiungono nuove categorie.
+**`/upload`** — Upload VidSwap JSON. Sezione "Carica Rosa": selettore partita + file Excel/ODS. La costante `CATEGORIES` in `app/upload/page.js` e `CATEGORIE` in `app/admin/page.js` elencano le categorie disponibili: `['eccellenza', 'coppa', 'u21', 'u19', 'u17', 'u16', 'u15']` — da aggiornare manualmente se si aggiungono nuove categorie.
+
+**`/admin`** — Visibile solo a `role === 'admin'`. Gestione utenti: lista, crea, modifica, attiva/disattiva, elimina. Ogni utente ha `tenant` e `categoria` opzionali.
 
 ## Giocatori — rosa e nomi
 
@@ -90,15 +96,16 @@ Il campo `player` nella risposta è già il nome completo (o il numero se la ros
 | `GET /v2/analytics/:tenant/giocatori/:match_name` | GET | Giocatori (per partita) |
 | `GET /v2/analytics/:tenant/report/:match_name` | GET | Partita detail |
 | `GET /v2/analytics/:tenant/mappa/:match_name?event_type=` | GET | Partita detail (mappa tiri) |
-| `GET /v2/analytics/:tenant/mappa_stagione?event_type=&category=` | GET | Squadra (mappa tiri cumulativa) |
-| `POST /v2/chat/ask` body: `{question, tenant, session_id?, match_name?}` | POST | Chat |
+| `GET /v2/analytics/:tenant/mappa_stagione?event_type=&category=` | GET | Squadra (mappa eventi cumulativa, qualsiasi event_type) |
+| `POST /v2/chat/ask` body: `{question, tenant, session_id?, match_name?, groq_api_key?}` | POST | Chat |
+| `POST /v2/chat/validate_key` body: `{groq_api_key}` | POST | Valida chiave Groq utente |
 
 ## Shared components (`components/`)
 
 - `KpiCard` — card metrica singola
 - `EventiChart` — Recharts bar chart
 - `MappaTiri` — shot map (usato nel dettaglio partita)
-- `MappaStatistica` — mappa tiri cumulativa stagione (campo intero SVG, heatmap + gol section)
+- `MappaStatistica` — mappa eventi cumulativa stagione (campo intero SVG, heatmap + stats section adattiva). Props: `tenant`, `categoria`, `tenantTeam`, `eventTypeId`. Self-contained: gestisce il proprio fetching con cache per tipo evento.
 
 ## Design system
 
