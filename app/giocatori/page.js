@@ -17,9 +17,8 @@ const SUB_COLS_DEFAULT = {
 }
 
 export default function GiocatoriPage() {
-  const { tenant, ready }  = useTenant()
+  const { tenant, ready, categoria } = useTenant()
   const [user,              setUser]              = useState(null)
-  const [categoria,         setCategoria]         = useState(null)
   const [matchFiltro,       setMatchFiltro]       = useState(null)
   const [periodo,           setPeriodo]           = useState('Totale')
   const [eventoTab,         setEventoTab]         = useState(null)
@@ -32,9 +31,7 @@ export default function GiocatoriPage() {
   const [ruoloFiltro,       setRuoloFiltro]       = useState(null)
 
   useEffect(() => {
-    const u = getUser()
-    setUser(u)
-    if (u?.role === 'manager' && u?.categoria) setCategoria(u.categoria)
+    setUser(getUser())
   }, [])
 
   // Carica column_config per il tenant
@@ -160,13 +157,6 @@ export default function GiocatoriPage() {
 
         {/* Selettori */}
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {categorieDisponibili.length > 1 && (
-            <select value={categoria || ''} onChange={e => { setCategoria(e.target.value || null); setMatchFiltro(null) }}
-              style={selectStyle(categoria ? '#8B5CF6' : null)}>
-              <option value="">Tutte le categorie</option>
-              {categorieDisponibili.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          )}
           <select value={matchFiltro || ''} onChange={e => setMatchFiltro(e.target.value || null)}
             style={selectStyle(matchFiltro ? '#F59E0B' : null)}>
             <option value="">Tutte le partite</option>
