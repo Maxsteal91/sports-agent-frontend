@@ -120,6 +120,15 @@ export default function GiocatoriPage() {
           row[`${et} — ${label}`] = evts[field] ?? 0
         })
       })
+      if (p.performance) {
+        const pf = p.performance
+        row['Minuti']        = pf.minuti ?? ''
+        row['Distanza (km)'] = pf.distanza_km ?? ''
+        row['Vel. media']    = pf.velocita_media_kmh ?? ''
+        row['Vel. max']      = pf.velocita_massima_kmh ?? ''
+        row['Sprint']        = pf.sprint ?? ''
+        row['Corse A.I.']   = pf.corse_alta_intensita ?? ''
+      }
       return row
     })
     const ws = XLSX.utils.json_to_sheet(rows)
