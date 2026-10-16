@@ -936,7 +936,14 @@ function GiocatoriTab({ data, homeTeam, awayTeam, tenant }) {
           <tbody>
             {players.map(p => (
               <tr key={p.player} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                <td style={{ padding: '0.4rem 0.6rem', color, fontFamily: 'var(--font-display)', fontWeight: 700 }}>{p.player}</td>
+                <td style={{ padding: '0.4rem 0.6rem', whiteSpace: 'nowrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    {p.ruolo && (
+                      <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: `${RUOLO_COLOR_TAB[p.ruolo]}22`, color: RUOLO_COLOR_TAB[p.ruolo], border: `1px solid ${RUOLO_COLOR_TAB[p.ruolo]}55`, fontFamily: 'var(--font-display)' }}>{p.ruolo}</span>
+                    )}
+                    <span style={{ color, fontFamily: 'var(--font-display)', fontWeight: 700 }}>{p.player}</span>
+                  </div>
+                </td>
                 {eventTypes.flatMap(et => getCols(et).map(([label, field], ci) => {
                   const val = p.events[et]?.[field] ?? 0
                   const isGoal = field === 'gol' && val > 0
@@ -959,12 +966,17 @@ function GiocatoriTab({ data, homeTeam, awayTeam, tenant }) {
     )
   }
 
-  const homePlayers = data.filter(p => norm(p.team) === norm(homeTeam))
-    .sort((a, b) => (parseInt(a.player) || 99) - (parseInt(b.player) || 99))
+  const RUOLO_ORDER = { POR: 0, DIF: 1, CEN: 2, ATT: 3 }
+  const sortByRuolo = (a, b) => {
+    const ra = RUOLO_ORDER[a.ruolo] ?? 9
+    const rb = RUOLO_ORDER[b.ruolo] ?? 9
+    if (ra !== rb) return ra - rb
+    return (parseInt(a.player) || 99) - (parseInt(b.player) || 99)
+  }
+  const homePlayers = data.filter(p => norm(p.team) === norm(homeTeam)).sort(sortByRuolo)
   const awayPlayers = data.filter(p => norm(p.team) !== norm(homeTeam))
     .sort((a, b) => (parseInt(a.player) || 99) - (parseInt(b.player) || 99))
-  const perfPlayers = data.filter(p => p.performance != null)
-    .sort((a, b) => (a.player || '').localeCompare(b.player || ''))
+  const perfPlayers = data.filter(p => p.performance != null).sort(sortByRuolo)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
