@@ -219,17 +219,9 @@ export default function UploadPage() {
           </div>
           <div>
             <label style={labelStyle}>Categoria</label>
-            <select
-              value={category}
-              onChange={e => setCategory(e.target.value)}
-              style={selectStyle}
-              onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-              onBlur={e => e.target.style.borderColor = 'var(--border)'}
-            >
-              {CATEGORIES.map(c => (
-                <option key={c} value={c}>{c.toUpperCase()}</option>
-              ))}
-            </select>
+            <div style={{ ...inputStyle, color: 'var(--text-muted)', cursor: 'default' }}>
+              {category ? category.toUpperCase() : '—'}
+            </div>
           </div>
         </div>
 
