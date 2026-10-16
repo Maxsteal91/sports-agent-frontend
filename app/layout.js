@@ -94,7 +94,7 @@ function NavBar() {
             }}
           >
             <option value="">Tutte</option>
-            {(categorieDisponibili.length > 0 ? categorieDisponibili : ['eccellenza','coppa','u21','u19','u17','u16','u15']).map(c => (
+            {['eccellenza', 'coppa'].map(c => (
               <option key={c} value={c}>{c.toUpperCase()}</option>
             ))}
           </select>
