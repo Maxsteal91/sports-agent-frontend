@@ -79,8 +79,8 @@ function NavBar() {
           </span>
         )}
 
-        {/* Selettore categoria — admin e manager */}
-        {user?.role !== 'viewer' && categorieDisponibili.length > 0 && (
+        {/* Selettore categoria — admin e manager (sempre visibile) */}
+        {user?.role !== 'viewer' && (
           <select
             value={categoria || ''}
             onChange={e => setCategoria(e.target.value || null)}
@@ -94,7 +94,7 @@ function NavBar() {
             }}
           >
             <option value="">Tutte</option>
-            {categorieDisponibili.map(c => (
+            {(categorieDisponibili.length > 0 ? categorieDisponibili : ['eccellenza','coppa','u21','u19','u17','u16','u15']).map(c => (
               <option key={c} value={c}>{c.toUpperCase()}</option>
             ))}
           </select>
