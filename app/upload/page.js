@@ -29,6 +29,14 @@ export default function UploadPage() {
   const [rosaError,      setRosaError]      = useState(null)
   const rosaFileInputRef = useRef(null)
 
+  // Performance
+  const [perfMatchName,  setPerfMatchName]  = useState('')
+  const [perfFile,       setPerfFile]       = useState(null)
+  const [perfLoading,    setPerfLoading]    = useState(false)
+  const [perfResult,     setPerfResult]     = useState(null)
+  const [perfError,      setPerfError]      = useState(null)
+  const perfFileInputRef = useRef(null)
+
   useEffect(() => {
     const u = getUser()
     setUser(u)
@@ -417,6 +425,88 @@ export default function UploadPage() {
           }}
         >
           {rosaLoading ? 'CARICAMENTO...' : 'CARICA ROSA'}
+        </button>
+      </div>
+
+      {/* Carica Performance */}
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem', marginBottom: '1.5rem' }}>
+        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem', fontWeight: 600, letterSpacing: '0.08em', color: 'var(--text)', textTransform: 'uppercase', marginBottom: '1rem' }}>
+          CARICA PERFORMANCE
+        </h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem' }}>
+          Carica il file Excel con dati fisici (minuti, km, velocità, sprint) per partita
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+          <div>
+            <label style={labelStyle}>Partita</label>
+            <select
+              value={perfMatchName}
+              onChange={e => setPerfMatchName(e.target.value)}
+              style={selectStyle}
+            >
+              <option value="">— seleziona partita —</option>
+              {partite.map(p => (
+                <option key={p.match_name} value={p.match_name}>{p.match_name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>File Excel (.xlsx)</label>
+            <div
+              onClick={() => perfFileInputRef.current?.click()}
+              style={{
+                ...inputStyle, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem',
+                color: perfFile ? '#10B981' : 'var(--text-muted)',
+                border: `1px solid ${perfFile ? 'rgba(16,185,129,0.4)' : 'var(--border)'}`,
+              }}
+            >
+              <input ref={perfFileInputRef} type="file" accept=".xlsx,.xls,.ods" onChange={e => { setPerfFile(e.target.files[0]); setPerfError(null) }} style={{ display: 'none' }} />
+              {perfFile ? `✅ ${perfFile.name}` : '📊 Clicca per selezionare...'}
+            </div>
+          </div>
+        </div>
+
+        {perfError && (
+          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '0.6rem 1rem', marginBottom: '0.75rem', color: '#EF4444', fontSize: '0.85rem' }}>
+            ❌ {perfError}
+          </div>
+        )}
+        {perfResult && (
+          <div style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', padding: '0.6rem 1rem', marginBottom: '0.75rem', color: '#10B981', fontSize: '0.85rem', fontFamily: 'var(--font-display)' }}>
+            ✅ Performance caricata — {perfResult.inserted} giocatori per {perfResult.match_name}
+          </div>
+        )}
+
+        <button
+          disabled={perfLoading || !perfMatchName || !perfFile}
+          onClick={async () => {
+            setPerfLoading(true); setPerfResult(null); setPerfError(null)
+            try {
+              const fd = new FormData()
+              fd.append('file', perfFile)
+              const token = getToken()
+              const res = await fetch(`/api/upload/v2/performance?tenant=${tenant}&match_name=${perfMatchName}`, {
+                method: 'POST',
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                body: fd,
+              })
+              if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Errore upload performance') }
+              const data = await res.json()
+              setPerfResult(data); setPerfFile(null)
+              if (perfFileInputRef.current) perfFileInputRef.current.value = ''
+            } catch (e) { setPerfError(e.message) }
+            finally { setPerfLoading(false) }
+          }}
+          style={{
+            padding: '0.7rem 2rem', borderRadius: '8px', border: 'none',
+            background: perfLoading || !perfMatchName || !perfFile ? 'rgba(0,229,255,0.1)' : 'var(--primary)',
+            color: perfLoading || !perfMatchName || !perfFile ? 'var(--text-muted)' : '#0A0E1A',
+            cursor: perfLoading || !perfMatchName || !perfFile ? 'not-allowed' : 'pointer',
+            fontFamily: 'var(--font-display)', fontWeight: 700, letterSpacing: '0.08em',
+          }}
+        >
+          {perfLoading ? 'CARICAMENTO...' : 'CARICA PERFORMANCE'}
         </button>
       </div>
 

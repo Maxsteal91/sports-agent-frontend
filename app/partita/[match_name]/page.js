@@ -885,9 +885,12 @@ const SUB_COLS_FALLBACK = {
   gkout:    [['tot','totale']],
 }
 
+const RUOLO_COLOR_TAB = { POR: '#F59E0B', DIF: '#3B82F6', CEN: '#10B981', ATT: '#EF4444' }
+
 function GiocatoriTab({ data, homeTeam, awayTeam, tenant }) {
   const norm = t => (t || '').toLowerCase().trim()
   const [colConfig, setColConfig] = useState({})
+  const [activeView, setActiveView] = useState('events')
 
   useEffect(() => {
     if (!tenant) return
@@ -896,8 +899,10 @@ function GiocatoriTab({ data, homeTeam, awayTeam, tenant }) {
       .catch(() => setColConfig({}))
   }, [tenant])
 
+  const hasPerformance = data.some(p => p.performance != null)
+
   // Tipi evento presenti nei dati
-  const eventTypes = [...new Set(data.flatMap(p => Object.keys(p.events)))].sort()
+  const eventTypes = [...new Set(data.flatMap(p => Object.keys(p.events || {})))].sort()
 
   const getCols = (et) => {
     const cfg = colConfig[et]
@@ -958,21 +963,77 @@ function GiocatoriTab({ data, homeTeam, awayTeam, tenant }) {
     .sort((a, b) => (parseInt(a.player) || 99) - (parseInt(b.player) || 99))
   const awayPlayers = data.filter(p => norm(p.team) !== norm(homeTeam))
     .sort((a, b) => (parseInt(a.player) || 99) - (parseInt(b.player) || 99))
+  const perfPlayers = data.filter(p => p.performance != null)
+    .sort((a, b) => (a.player || '').localeCompare(b.player || ''))
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-      <div>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.9rem', fontWeight: 700, color: COLOR_HOME, marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-          {homeTeam}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+      {/* Tab switcher */}
+      {hasPerformance && (
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {[['events', 'Statistiche'], ['performance', 'Performance']].map(([id, label]) => (
+            <button key={id} onClick={() => setActiveView(id)} style={{
+              padding: '0.4rem 1rem', borderRadius: '8px', border: `1px solid ${activeView === id ? (id === 'performance' ? '#10B981' : 'var(--primary)') : 'var(--border)'}`,
+              background: activeView === id ? (id === 'performance' ? 'rgba(16,185,129,0.1)' : 'rgba(0,229,255,0.1)') : 'transparent',
+              color: activeView === id ? (id === 'performance' ? '#10B981' : 'var(--primary)') : 'var(--text-muted)',
+              cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.06em',
+            }}>{label}</button>
+          ))}
         </div>
-        {renderTable(homePlayers, COLOR_HOME)}
-      </div>
-      <div>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.9rem', fontWeight: 700, color: COLOR_AWAY, marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-          {awayTeam}
+      )}
+
+      {activeView === 'events' ? (
+        <>
+          <div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.9rem', fontWeight: 700, color: COLOR_HOME, marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              {homeTeam}
+            </div>
+            {renderTable(homePlayers, COLOR_HOME)}
+          </div>
+          <div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.9rem', fontWeight: 700, color: COLOR_AWAY, marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              {awayTeam}
+            </div>
+            {renderTable(awayPlayers, COLOR_AWAY)}
+          </div>
+        </>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['Giocatore', 'Min', 'Km', 'Vel. media', 'Vel. max', 'Sprint', 'Corse A.I.'].map(h => (
+                  <th key={h} style={{ padding: '0.4rem 0.6rem', textAlign: h === 'Giocatore' ? 'left' : 'right', color: 'var(--text-muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.65rem' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {perfPlayers.map((p, i) => {
+                const pf = p.performance
+                return (
+                  <tr key={p.player} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                    <td style={{ padding: '0.4rem 0.6rem', whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        {p.ruolo && (
+                          <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: `${RUOLO_COLOR_TAB[p.ruolo]}22`, color: RUOLO_COLOR_TAB[p.ruolo], border: `1px solid ${RUOLO_COLOR_TAB[p.ruolo]}55`, fontFamily: 'var(--font-display)' }}>{p.ruolo}</span>
+                        )}
+                        <span style={{ color: COLOR_HOME, fontFamily: 'var(--font-display)', fontWeight: 700 }}>{p.player}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '0.4rem 0.6rem', textAlign: 'right', color: 'var(--text)', fontWeight: 600 }}>{pf?.minuti ?? '—'}</td>
+                    <td style={{ padding: '0.4rem 0.6rem', textAlign: 'right', color: 'var(--text)' }}>{pf?.distanza_km != null ? `${pf.distanza_km}` : '—'}</td>
+                    <td style={{ padding: '0.4rem 0.6rem', textAlign: 'right', color: 'var(--text-muted)' }}>{pf?.velocita_media_kmh != null ? `${pf.velocita_media_kmh} km/h` : '—'}</td>
+                    <td style={{ padding: '0.4rem 0.6rem', textAlign: 'right', color: 'var(--text-muted)' }}>{pf?.velocita_massima_kmh != null ? `${pf.velocita_massima_kmh} km/h` : '—'}</td>
+                    <td style={{ padding: '0.4rem 0.6rem', textAlign: 'right', color: 'var(--text-muted)' }}>{pf?.sprint ?? '—'}</td>
+                    <td style={{ padding: '0.4rem 0.6rem', textAlign: 'right', color: 'var(--text-muted)' }}>{pf?.corse_alta_intensita ?? '—'}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
-        {renderTable(awayPlayers, COLOR_AWAY)}
-      </div>
+      )}
     </div>
   )
 }

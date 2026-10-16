@@ -90,7 +90,9 @@ export default function GiocatoriPage() {
   const RUOLO_ORDER = { POR: 0, DIF: 1, CEN: 2, ATT: 3 }
   const RUOLO_COLOR = { POR: '#F59E0B', DIF: '#3B82F6', CEN: '#10B981', ATT: '#EF4444' }
 
+  const hasPerformance = data.some(p => p.performance != null)
   const isAll = eventoTab === 'all'
+  const isPerf = eventoTab === 'performance'
   const sortPlayers = (a, b) => {
     const ra = RUOLO_ORDER[a.ruolo] ?? 9
     const rb = RUOLO_ORDER[b.ruolo] ?? 9
@@ -98,9 +100,11 @@ export default function GiocatoriPage() {
     return (a.player || '').localeCompare(b.player || '')
   }
   const filteredByRuolo = ruoloFiltro ? data.filter(p => p.ruolo === ruoloFiltro) : data
-  const playerRows = isAll
-    ? [...filteredByRuolo].sort(sortPlayers)
-    : filteredByRuolo.filter(p => p.events?.[eventoTab]).sort(sortPlayers)
+  const playerRows = isPerf
+    ? [...data].filter(p => p.performance != null).sort(sortPlayers)
+    : isAll
+      ? [...filteredByRuolo].sort(sortPlayers)
+      : filteredByRuolo.filter(p => p.events?.[eventoTab]).sort(sortPlayers)
 
   const ruoliDisponibili = [...new Set(data.map(p => p.ruolo).filter(Boolean))]
     .sort((a, b) => (RUOLO_ORDER[a] ?? 9) - (RUOLO_ORDER[b] ?? 9))
@@ -206,6 +210,16 @@ export default function GiocatoriPage() {
               fontWeight: 600, letterSpacing: '0.03em', textTransform: 'capitalize',
             }}>{et === 'all' ? 'Tutti' : et}</button>
           ))}
+          {hasPerformance && (
+            <button onClick={() => setEventoTab('performance')} style={{
+              padding: '0.5rem 1rem', borderRadius: '8px',
+              border: `1px solid ${isPerf ? '#10B981' : 'var(--border)'}`,
+              background: isPerf ? 'rgba(16,185,129,0.1)' : 'var(--bg-card)',
+              color: isPerf ? '#10B981' : 'var(--text-muted)',
+              cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '0.9rem',
+              fontWeight: 600, letterSpacing: '0.03em',
+            }}>Performance</button>
+          )}
         </div>
       )}
 
@@ -213,6 +227,41 @@ export default function GiocatoriPage() {
       <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem' }}>
         {loading ? (
           <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Caricamento...</div>
+        ) : isPerf ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  {['Giocatore', 'Min', 'Km', 'Vel. media', 'Vel. max', 'Sprint', 'Corse A.I.'].map(h => (
+                    <th key={h} style={thStyle(h === 'Giocatore' ? 'left' : 'right')}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {playerRows.map((p, i) => {
+                  const pf = p.performance
+                  return (
+                    <tr key={p.player} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                      <td style={{ padding: '0.55rem 0.75rem', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          {p.ruolo && (
+                            <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: `${RUOLO_COLOR[p.ruolo]}22`, color: RUOLO_COLOR[p.ruolo], border: `1px solid ${RUOLO_COLOR[p.ruolo]}55`, fontFamily: 'var(--font-display)' }}>{p.ruolo}</span>
+                          )}
+                          <span style={{ color: COLOR_HOME, fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem' }}>{p.player}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right', color: 'var(--text)', fontWeight: 600 }}>{pf?.minuti ?? '—'}</td>
+                      <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right', color: 'var(--text)' }}>{pf?.distanza_km != null ? `${pf.distanza_km}` : '—'}</td>
+                      <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right', color: 'var(--text-muted)' }}>{pf?.velocita_media_kmh != null ? `${pf.velocita_media_kmh} km/h` : '—'}</td>
+                      <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right', color: 'var(--text-muted)' }}>{pf?.velocita_massima_kmh != null ? `${pf.velocita_massima_kmh} km/h` : '—'}</td>
+                      <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right', color: 'var(--text-muted)' }}>{pf?.sprint ?? '—'}</td>
+                      <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right', color: 'var(--text-muted)' }}>{pf?.corse_alta_intensita ?? '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         ) : playerRows.length === 0 ? (
           <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
             {eventTypes.length === 0 ? 'Nessun dato giocatore disponibile per questo tenant.' : 'Nessun dato per questo filtro.'}
