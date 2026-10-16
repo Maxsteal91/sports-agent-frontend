@@ -364,7 +364,7 @@ export default function UploadPage() {
               style={selectStyle}
             >
               <option value="">— seleziona partita —</option>
-              {partite.map(p => (
+              {partite.filter(p => !category || p.category === category).map(p => (
                 <option key={p.match_name} value={p.match_name}>{p.match_name}</option>
               ))}
             </select>
@@ -446,7 +446,7 @@ export default function UploadPage() {
               style={selectStyle}
             >
               <option value="">— seleziona partita —</option>
-              {partite.map(p => (
+              {partite.filter(p => !category || p.category === category).map(p => (
                 <option key={p.match_name} value={p.match_name}>{p.match_name}</option>
               ))}
             </select>
