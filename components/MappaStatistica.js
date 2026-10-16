@@ -35,7 +35,7 @@ function normalizeShotsForDisplay(shots, tenantTeam) {
   })
   const out = []
   groups.forEach(gs => {
-    const isOurTeam = gs[0].team === tenantTeam
+    const isOurTeam = gs[0].team?.toLowerCase() === tenantTeam?.toLowerCase()
     const sorted = [...gs].map(s => s.x).sort((a, b) => a - b)
     const medianX = sorted[Math.floor(sorted.length / 2)]
     const mirror = isOurTeam ? medianX > 50 : medianX < 50
@@ -309,8 +309,8 @@ export default function MappaStatistica({ tenant, categoria, tenantTeam, eventTy
     const filtered = period === 'Tutto' ? data : data.filter(s => s.period === period)
     const normalized = normalizeShotsForDisplay(filtered, tenantTeam)
     return {
-      ourEvents:   normalized.filter(s => s.team === tenantTeam),
-      theirEvents: normalized.filter(s => s.team !== tenantTeam),
+      ourEvents:   normalized.filter(s => s.team?.toLowerCase() === tenantTeam?.toLowerCase()),
+      theirEvents: normalized.filter(s => s.team?.toLowerCase() !== tenantTeam?.toLowerCase()),
     }
   }, [data, tenantTeam, period])
 
