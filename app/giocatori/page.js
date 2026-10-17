@@ -156,26 +156,41 @@ export default function GiocatoriPage() {
     setExportOpen(false)
     const partiteDaEsportare = partiteFiltrate
     const allRows = []
+    const allEtypes = new Set()
+
     for (const p of partiteDaEsportare) {
-      const params = new URLSearchParams()
-      params.set('team', homeTeam)
-      params.set('period', periodo)
       try {
-        const res = await fetchAPI(`/v2/analytics/${tenant}/giocatori/${p.match_name}?${params}`)
+        const res = await fetchAPI(`/v2/analytics/${tenant}/giocatori/${p.match_name}`)
         const label = `${cap(p.home_team)} vs ${cap(p.away_team)}`
-        const players = (res.data || []).filter(pl => pl.ruolo)
+        const players = (res.data || []).filter(pl =>
+          pl.ruolo && pl.team?.toLowerCase() === homeTeam?.toLowerCase()
+        )
+        players.forEach(pl => Object.keys(pl.events || {}).forEach(et => allEtypes.add(et)))
         players.sort(sortPlayers).forEach(pl => {
           allRows.push(buildPlayerRow(pl, { Partita: label }))
         })
       } catch {}
     }
     if (!allRows.length) return
-    // Riordina colonne: Giocatore, Ruolo, Anno, Partita, poi il resto
+
+    // Assicura che tutte le colonne evento compaiano in ogni riga (0 se assente)
+    const etList = [...allEtypes].sort()
+    allRows.forEach(r => {
+      etList.forEach(et => {
+        getCols(et).forEach(([label]) => {
+          const key = `${et} — ${label}`
+          if (!(key in r)) r[key] = 0
+        })
+      })
+    })
+
+    // Riordina colonne: Giocatore, Ruolo, Anno, Partita, eventi, performance
     const colOrder = ['Giocatore', 'Ruolo', 'Anno', 'Partita']
-    const otherCols = Object.keys(allRows[0]).filter(k => !colOrder.includes(k))
+    const allKeys = Object.keys(allRows.reduce((acc, r) => ({ ...acc, ...r }), {}))
+    const otherCols = allKeys.filter(k => !colOrder.includes(k))
     const orderedRows = allRows.map(r => {
       const ordered = {}
-      ;[...colOrder, ...otherCols].forEach(k => { if (k in r) ordered[k] = r[k] })
+      ;[...colOrder, ...otherCols].forEach(k => { ordered[k] = r[k] ?? '' })
       return ordered
     })
     const ws = XLSX.utils.json_to_sheet(orderedRows)
