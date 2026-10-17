@@ -163,7 +163,7 @@ export default function GiocatoriPage() {
       try {
         const res = await fetchAPI(`/v2/analytics/${tenant}/giocatori/${p.match_name}?${params}`)
         const label = `${cap(p.home_team)} vs ${cap(p.away_team)}`
-        const players = res.data || []
+        const players = (res.data || []).filter(pl => pl.ruolo)
         players.sort(sortPlayers).forEach(pl => {
           allRows.push(buildPlayerRow(pl, { Partita: label }))
         })
