@@ -109,33 +109,79 @@ export default function GiocatoriPage() {
   const ruoliDisponibili = [...new Set(data.map(p => p.ruolo).filter(Boolean))]
     .sort((a, b) => (RUOLO_ORDER[a] ?? 9) - (RUOLO_ORDER[b] ?? 9))
 
-  const exportExcel = () => {
+  const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
+
+  const [exportOpen, setExportOpen] = useState(false)
+
+  useEffect(() => {
+    if (!exportOpen) return
+    const close = () => setExportOpen(false)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [exportOpen])
+
+  const buildPlayerRow = (p, extraCols = {}) => {
     const allEt = eventTypes
-    const rows = [...filteredByRuolo].sort(sortPlayers).map(p => {
-      const row = { Giocatore: p.player, Ruolo: p.ruolo || '—', Anno: p.anno_nascita || '—' }
-      allEt.forEach(et => {
-        const evts = p.events?.[et]
-        if (!evts) return
-        getCols(et).forEach(([label, field]) => {
-          row[`${et} — ${label}`] = evts[field] ?? 0
-        })
+    const row = { Giocatore: p.player, Ruolo: p.ruolo || '—', Anno: p.anno_nascita || '—', ...extraCols }
+    allEt.forEach(et => {
+      const evts = p.events?.[et]
+      if (!evts) return
+      getCols(et).forEach(([label, field]) => {
+        row[`${et} — ${label}`] = evts[field] ?? 0
       })
-      if (p.performance) {
-        const pf = p.performance
-        row['Minuti']        = pf.minuti ?? ''
-        row['Distanza (km)'] = pf.distanza_km ?? ''
-        row['Vel. media']    = pf.velocita_media_kmh ?? ''
-        row['Vel. max']      = pf.velocita_massima_kmh ?? ''
-        row['Sprint']        = pf.sprint ?? ''
-        row['Corse A.I.']   = pf.corse_alta_intensita ?? ''
-      }
-      return row
     })
+    if (p.performance) {
+      const pf = p.performance
+      row['Minuti']        = pf.minuti ?? ''
+      row['Distanza (km)'] = pf.distanza_km ?? ''
+      row['Vel. media']    = pf.velocita_media_kmh ?? ''
+      row['Vel. max']      = pf.velocita_massima_kmh ?? ''
+      row['Sprint']        = pf.sprint ?? ''
+      row['Corse A.I.']   = pf.corse_alta_intensita ?? ''
+    }
+    return row
+  }
+
+  const exportExcel = () => {
+    const rows = [...filteredByRuolo].sort(sortPlayers).map(p => buildPlayerRow(p))
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Giocatori')
     const suffix = matchFiltro ? `_${matchFiltro}` : ruoloFiltro ? `_${ruoloFiltro}` : ''
     XLSX.writeFile(wb, `giocatori_${tenant}${suffix}.xlsx`)
+    setExportOpen(false)
+  }
+
+  const exportExcelPerPartita = async () => {
+    setExportOpen(false)
+    const partiteDaEsportare = partiteFiltrate
+    const allRows = []
+    for (const p of partiteDaEsportare) {
+      const params = new URLSearchParams()
+      params.set('team', homeTeam)
+      params.set('period', periodo)
+      try {
+        const res = await fetchAPI(`/v2/analytics/${tenant}/giocatori/${p.match_name}?${params}`)
+        const label = `${cap(p.home_team)} vs ${cap(p.away_team)}`
+        const players = res.data || []
+        players.sort(sortPlayers).forEach(pl => {
+          allRows.push(buildPlayerRow(pl, { Partita: label }))
+        })
+      } catch {}
+    }
+    if (!allRows.length) return
+    // Riordina colonne: Giocatore, Ruolo, Anno, Partita, poi il resto
+    const colOrder = ['Giocatore', 'Ruolo', 'Anno', 'Partita']
+    const otherCols = Object.keys(allRows[0]).filter(k => !colOrder.includes(k))
+    const orderedRows = allRows.map(r => {
+      const ordered = {}
+      ;[...colOrder, ...otherCols].forEach(k => { if (k in r) ordered[k] = r[k] })
+      return ordered
+    })
+    const ws = XLSX.utils.json_to_sheet(orderedRows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Per partita')
+    XLSX.writeFile(wb, `giocatori_${tenant}_per_partita.xlsx`)
   }
 
   // Ricava colonne visibili per un event type dal config dinamico (fallback ai default statici)
@@ -173,10 +219,9 @@ export default function GiocatoriPage() {
           <select value={matchFiltro || ''} onChange={e => setMatchFiltro(e.target.value || null)}
             style={selectStyle(matchFiltro ? '#F59E0B' : null)}>
             <option value="">Tutte le partite</option>
-            {partiteFiltrate.map(p => {
-              const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
-              return <option key={p.match_name} value={p.match_name}>{cap(p.home_team)} vs {cap(p.away_team)}</option>
-            })}
+            {partiteFiltrate.map(p => (
+              <option key={p.match_name} value={p.match_name}>{cap(p.home_team)} vs {cap(p.away_team)}</option>
+            ))}
           </select>
           {ruoliDisponibili.length > 0 && (
             <select value={ruoloFiltro || ''} onChange={e => setRuoloFiltro(e.target.value || null)}
@@ -192,16 +237,44 @@ export default function GiocatoriPage() {
             <option value="Secondo_Tempo">Secondo Tempo</option>
           </select>
           {playerRows.length > 0 && (
-            <button onClick={exportExcel} style={{
-              padding: '0.5rem 1rem', borderRadius: '8px',
-              border: '1px solid rgba(0,229,255,0.3)',
-              background: 'rgba(0,229,255,0.06)',
-              color: 'var(--primary)', cursor: 'pointer',
-              fontFamily: 'var(--font-display)', fontSize: '0.85rem',
-              fontWeight: 600, letterSpacing: '0.05em', whiteSpace: 'nowrap',
-            }}>
-              ↓ Excel
-            </button>
+            <div style={{ position: 'relative' }}>
+              <button onClick={e => { e.stopPropagation(); setExportOpen(o => !o) }} style={{
+                padding: '0.5rem 1rem', borderRadius: '8px',
+                border: '1px solid rgba(0,229,255,0.3)',
+                background: 'rgba(0,229,255,0.06)',
+                color: 'var(--primary)', cursor: 'pointer',
+                fontFamily: 'var(--font-display)', fontSize: '0.85rem',
+                fontWeight: 600, letterSpacing: '0.05em', whiteSpace: 'nowrap',
+              }}>
+                ↓ Esporta ▾
+              </button>
+              {exportOpen && (
+                <div style={{
+                  position: 'absolute', right: 0, top: '110%', zIndex: 100,
+                  background: 'var(--bg-card)', border: '1px solid var(--border)',
+                  borderRadius: '8px', minWidth: '180px', boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                  overflow: 'hidden',
+                }}>
+                  {[
+                    { label: 'Totali stagione', fn: exportExcel },
+                    { label: 'Per partita', fn: exportExcelPerPartita },
+                  ].map(({ label, fn }) => (
+                    <button key={label} onClick={fn} style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '0.65rem 1rem', background: 'none',
+                      border: 'none', color: 'var(--text)', cursor: 'pointer',
+                      fontFamily: 'var(--font-display)', fontSize: '0.85rem',
+                      fontWeight: 500,
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,229,255,0.08)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
