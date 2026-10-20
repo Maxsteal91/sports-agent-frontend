@@ -8,6 +8,8 @@ import {
 import { postAPI, fetchAPI } from '../../lib/api';
 import { getUser } from '../../lib/auth';
 import { useTenant } from '../../lib/TenantContext';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // ─────────────────────────────────────────
 // DESIGN TOKENS
@@ -390,15 +392,32 @@ function SqlBadge({ sql }) {
 // BOLLA CHAT
 // ─────────────────────────────────────────
 function AnswerText({ text }) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return (
-    <p style={{ margin: 0, lineHeight: 1.6, color: T.textPrimary, fontSize: 14 }}>
-      {parts.map((p, i) =>
-        p.startsWith('**') && p.endsWith('**')
-          ? <strong key={i} style={{ color: T.primary }}>{p.slice(2, -2)}</strong>
-          : p
-      )}
-    </p>
+    <div style={{ fontSize: 14, lineHeight: 1.6, color: T.textPrimary }}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ children }) => <p style={{ margin: '0 0 0.5em' }}>{children}</p>,
+          strong: ({ children }) => <strong style={{ color: T.primary }}>{children}</strong>,
+          em: ({ children }) => <em style={{ color: T.textMuted }}>{children}</em>,
+          ul: ({ children }) => <ul style={{ margin: '0.4em 0', paddingLeft: '1.4em' }}>{children}</ul>,
+          ol: ({ children }) => <ol style={{ margin: '0.4em 0', paddingLeft: '1.4em' }}>{children}</ol>,
+          li: ({ children }) => <li style={{ marginBottom: '0.2em' }}>{children}</li>,
+          code: ({ children }) => <code style={{ background: 'rgba(0,229,255,0.08)', borderRadius: 4, padding: '1px 5px', fontSize: 12, color: T.primary }}>{children}</code>,
+          table: ({ children }) => (
+            <div style={{ overflowX: 'auto', margin: '0.6em 0' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => <thead style={{ borderBottom: `2px solid ${T.primary}40` }}>{children}</thead>,
+          th: ({ children }) => <th style={{ padding: '6px 12px', textAlign: 'left', color: T.primary, fontWeight: 600, whiteSpace: 'nowrap' }}>{children}</th>,
+          td: ({ children }) => <td style={{ padding: '5px 12px', borderBottom: `1px solid ${T.border}`, color: T.textPrimary }}>{children}</td>,
+          tr: ({ children }) => <tr style={{ transition: 'background 0.15s' }}>{children}</tr>,
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
   );
 }
 
