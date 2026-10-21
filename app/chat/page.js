@@ -610,6 +610,7 @@ export default function ChatPage() {
         session_id: sessionId || undefined,
       };
       if (matchName)  body.match_name   = matchName;
+      if (categoria)  body.category     = categoria;
       if (groqApiKey) body.groq_api_key = groqApiKey;
 
       const res = await postAPI('/v2/chat/ask', body);
