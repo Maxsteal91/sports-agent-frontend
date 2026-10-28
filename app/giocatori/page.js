@@ -4,6 +4,7 @@ import { fetchAPI } from '../../lib/api'
 import { getUser } from '../../lib/auth'
 import { useTenant } from '../../lib/TenantContext'
 import * as XLSX from 'xlsx'
+import PlayerModal from '../../components/PlayerModal'
 
 const COLOR_HOME = '#00E5FF'
 
@@ -29,6 +30,7 @@ export default function GiocatoriPage() {
   const [homeTeam,          setHomeTeam]          = useState(null)
   const [colConfig,         setColConfig]         = useState({})
   const [ruoloFiltro,       setRuoloFiltro]       = useState(null)
+  const [selectedPlayer,    setSelectedPlayer]    = useState(null)
 
   useEffect(() => {
     setUser(getUser())
@@ -132,7 +134,9 @@ export default function GiocatoriPage() {
     })
     if (p.performance) {
       const pf = p.performance
-      row['Minuti']        = pf.minuti ?? ''
+      row['Partite']       = pf.partite_giocate ?? ''
+      row['Minuti tot']    = pf.minuti ?? ''
+      row['Minuti medi']   = pf.minuti_medi ?? ''
       row['Distanza (km)'] = pf.distanza_km ?? ''
       row['Vel. media']    = pf.velocita_media_kmh ?? ''
       row['Vel. max']      = pf.velocita_massima_kmh ?? ''
@@ -216,6 +220,7 @@ export default function GiocatoriPage() {
   }
 
   return (
+    <>
     <div style={{ padding: '2rem', maxWidth: '1100px', margin: '0 auto' }}>
 
       {/* Header */}
@@ -329,7 +334,7 @@ export default function GiocatoriPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  {['Giocatore', 'Min', 'Km', 'Vel. media', 'Vel. max', 'Sprint', 'Corse A.I.'].map(h => (
+                  {['Giocatore', 'Partite', 'Min tot', 'Min medi', 'Km', 'Vel. media', 'Vel. max', 'Sprint', 'Corse A.I.'].map(h => (
                     <th key={h} style={thStyle(h === 'Giocatore' ? 'left' : 'right')}>{h}</th>
                   ))}
                 </tr>
@@ -344,10 +349,15 @@ export default function GiocatoriPage() {
                           {p.ruolo && (
                             <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: `${RUOLO_COLOR[p.ruolo]}22`, color: RUOLO_COLOR[p.ruolo], border: `1px solid ${RUOLO_COLOR[p.ruolo]}55`, fontFamily: 'var(--font-display)' }}>{p.ruolo}</span>
                           )}
-                          <span style={{ color: COLOR_HOME, fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem' }}>{p.player}</span>
+                          <button onClick={() => setSelectedPlayer(p)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: COLOR_HOME, fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem', textDecoration: 'none' }}
+                            onMouseEnter={e => e.currentTarget.style.opacity = '0.7'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
+                            {p.player}
+                          </button>
                         </div>
                       </td>
+                      <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right', color: 'var(--text)', fontWeight: 600 }}>{pf?.partite_giocate ?? '—'}</td>
                       <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right', color: 'var(--text)', fontWeight: 600 }}>{pf?.minuti ?? '—'}</td>
+                      <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right', color: 'var(--text-muted)' }}>{pf?.minuti_medi ?? '—'}</td>
                       <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right', color: 'var(--text)' }}>{pf?.distanza_km != null ? `${pf.distanza_km}` : '—'}</td>
                       <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right', color: 'var(--text-muted)' }}>{pf?.velocita_media_kmh != null ? `${pf.velocita_media_kmh} km/h` : '—'}</td>
                       <td style={{ padding: '0.55rem 0.75rem', textAlign: 'right', color: 'var(--text-muted)' }}>{pf?.velocita_massima_kmh != null ? `${pf.velocita_massima_kmh} km/h` : '—'}</td>
@@ -410,9 +420,10 @@ export default function GiocatoriPage() {
                             fontFamily: 'var(--font-display)',
                           }}>{p.ruolo}</span>
                         )}
-                        <span style={{ color: COLOR_HOME, fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem' }}>
+                        <button onClick={() => setSelectedPlayer(p)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: COLOR_HOME, fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem' }}
+                          onMouseEnter={e => e.currentTarget.style.opacity = '0.7'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
                           {p.player}
-                        </span>
+                        </button>
                         {p.anno_nascita && (
                           <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                             {p.anno_nascita}
@@ -457,6 +468,18 @@ export default function GiocatoriPage() {
         )}
       </div>
     </div>
+
+    {selectedPlayer && (
+      <PlayerModal
+        player={selectedPlayer}
+        allPlayers={data}
+        tenant={tenant}
+        matchFiltro={matchFiltro}
+        getCols={getCols}
+        onClose={() => setSelectedPlayer(null)}
+      />
+    )}
+    </>
   )
 }
 
