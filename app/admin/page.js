@@ -219,192 +219,60 @@ function UtentiSection({ allTenants }) {
   )
 }
 
-// ─── Sezione Colonne Giocatori ────────────────────────────────────
-const EVENT_TYPE_LABELS = {
-  shot: 'Tiri', cross: 'Cross', freekick: 'Punizioni', corner: 'Corner', gkout: 'Uscite portiere', transition: 'Transizioni',
-}
-
-function ColonneSection({ allTenants }) {
-  const [tenant,    setTenant]    = useState(allTenants[0] || '')
-  const [config,    setConfig]    = useState({})
-  const [activeEt,  setActiveEt]  = useState('shot')
-  const [loading,   setLoading]   = useState(false)
-  const [saving,    setSaving]    = useState(false)
-  const [toast,     setToast]     = useState('')
-
-  useEffect(() => {
-    if (!tenant) return
-    setLoading(true)
-    fetchAPI(`/v2/analytics/${tenant}/column_config`)
-      .then(d => { setConfig(d.config || {}); const ets = Object.keys(d.config || {}); if (!ets.includes(activeEt) && ets.length) setActiveEt(ets[0]) })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [tenant])
-
-  const eventTypes = Object.keys(config)
-
-  const updateCol = (et, idx, field, value) => {
-    setConfig(prev => {
-      const cols = [...(prev[et] || [])]
-      cols[idx] = { ...cols[idx], [field]: value }
-      return { ...prev, [et]: cols }
-    })
-  }
-
-  // sposta su/giù dentro il tipo di evento: l'ordine è quello della tabella
-  const sposta = (et, i, d) => setConfig(prev => {
-    const cols = [...(prev[et] || [])], j = i + d
-    if (j < 0 || j >= cols.length) return prev
-    ;[cols[i], cols[j]] = [cols[j], cols[i]]
-    return { ...prev, [et]: cols }
-  })
-
-  const handleSave = async () => {
-    setSaving(true)
-    try {
-      const ordinata = Object.fromEntries(Object.entries(config).map(([et, cols]) =>
-        [et, cols.map((c, i) => ({ ...c, ordine: i }))]))
-      await putAPI(`/v2/analytics/${tenant}/column_config`, { config: ordinata })
-      setToast('Configurazione salvata')
-      setTimeout(() => setToast(''), 3000)
-    } catch(e) { setToast('Errore: ' + e.message); setTimeout(() => setToast(''), 4000) }
-    finally { setSaving(false) }
-  }
-
-  const cols = config[activeEt] || []
-
-  return (
-    <>
-      {/* Header tenant + save */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1.5rem', flexWrap:'wrap', gap:'0.75rem' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
-          <span style={{ fontSize:'0.8rem', color:T.muted, textTransform:'uppercase', letterSpacing:'0.06em' }}>Tenant</span>
-          <select value={tenant} onChange={e => setTenant(e.target.value)}
-            style={{ padding:'0.45rem 0.9rem', borderRadius:8, background:'rgba(255,255,255,0.05)',
-              border:`1px solid ${T.border}`, color:T.text, fontSize:'0.85rem', cursor:'pointer' }}>
-            {allTenants.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <button onClick={handleSave} disabled={saving} style={{ padding:'0.55rem 1.4rem', borderRadius:8,
-          background:T.primary, border:'none', color:'#0A0E1A', fontFamily:'var(--font-display)',
-          fontSize:'0.85rem', fontWeight:700, letterSpacing:'0.06em', textTransform:'uppercase',
-          cursor:saving?'not-allowed':'pointer' }}>{saving ? 'Salvataggio...' : 'Salva'}</button>
-      </div>
-
-      {loading ? (
-        <div style={{ color:T.muted, fontSize:'0.85rem' }}>Caricamento...</div>
-      ) : (
-        <>
-          {/* Tab event type */}
-          <div style={{ display:'flex', gap:'0.4rem', flexWrap:'wrap', marginBottom:'1.25rem' }}>
-            {eventTypes.map(et => (
-              <button key={et} onClick={() => setActiveEt(et)} style={{
-                padding:'0.4rem 0.9rem', borderRadius:8, cursor:'pointer',
-                border:`1px solid ${activeEt===et ? T.primary : T.border}`,
-                background: activeEt===et ? 'rgba(0,229,255,0.1)' : 'transparent',
-                color: activeEt===et ? T.primary : T.muted,
-                fontFamily:'var(--font-display)', fontSize:'0.8rem', fontWeight:600,
-                letterSpacing:'0.04em', textTransform:'capitalize',
-              }}>{EVENT_TYPE_LABELS[et] || et}</button>
-            ))}
-          </div>
-
-          {/* Tabella colonne */}
-          <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.85rem' }}>
-              <thead>
-                <tr style={{ borderBottom:`1px solid ${T.border}` }}>
-                  {['Visibile','Campo DB','Etichetta','Ordine'].map(h => (
-                    <th key={h} style={{ padding:'0.75rem 1rem', textAlign:'left', color:T.muted,
-                      fontFamily:'var(--font-display)', fontSize:10, letterSpacing:'0.08em',
-                      textTransform:'uppercase', fontWeight:600 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {cols.map((col, i) => (
-                  <tr key={col.nome} style={{ borderBottom:`1px solid rgba(255,255,255,0.04)`,
-                    background: i%2===0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
-                    <td style={{ padding:'0.65rem 1rem' }}>
-                      <input type="checkbox" checked={col.visibile}
-                        onChange={e => updateCol(activeEt, i, 'visibile', e.target.checked)}
-                        style={{ width:16, height:16, cursor:'pointer', accentColor:T.primary }}/>
-                    </td>
-                    <td style={{ padding:'0.65rem 1rem', color:T.muted, fontFamily:'monospace', fontSize:'0.8rem' }}>
-                      {col.nome}
-                    </td>
-                    <td style={{ padding:'0.65rem 1rem' }}>
-                      <input type="text" value={col.label}
-                        onChange={e => updateCol(activeEt, i, 'label', e.target.value)}
-                        style={{ padding:'0.35rem 0.65rem', borderRadius:6,
-                          background:'rgba(255,255,255,0.05)', border:`1px solid ${T.border}`,
-                          color:T.text, fontSize:'0.85rem', outline:'none', width:'100%', maxWidth:200 }}/>
-                    </td>
-                    <td style={{ padding:'0.65rem 1rem' }}>
-                      {[['↑', -1], ['↓', 1]].map(([f, d]) => (
-                        <button key={f} onClick={() => sposta(activeEt, i, d)} style={{ marginRight:4, padding:'0.15rem 0.5rem',
-                          borderRadius:4, border:`1px solid ${T.border}`, background:'transparent', color:T.muted, cursor:'pointer' }}>{f}</button>
-                      ))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <p style={{ color:T.muted, fontSize:'0.75rem', marginTop:'0.75rem' }}>
-            Le colonne non visibili non vengono mostrate nella sezione Giocatori; ↑ ↓ cambiano l'ordine (premi Salva).
-          </p>
-        </>
-      )}
-
-      {toast && (
-        <div style={{ position:'fixed', bottom:24, right:24,
-          background: toast.startsWith('Errore') ? T.danger : '#10B981',
-          color:'#fff', padding:'0.75rem 1.5rem', borderRadius:8,
-          fontFamily:'var(--font-display)', fontSize:13, fontWeight:600,
-          letterSpacing:'0.05em', boxShadow:'0 4px 20px rgba(0,0,0,0.4)', zIndex:300 }}>
-          {toast}
-        </div>
-      )}
-    </>
-  )
-}
-
-// ─── Tipi di evento (tag): visibilità, nome e ordine in tutto il sito ───
-function TipiEventoSection({ allTenants }) {
+// ─── Eventi e statistiche ────────────────────────────────────────
+// A sinistra i tipi di evento (visibilità, nome e ordine in tutto il sito: tag_visualizzazione), a destra
+// le colonne dell'evento selezionato nelle tabelle giocatori (pagina Giocatori e dettaglio partita:
+// column_config). Un solo Salva per le due configurazioni.
+function EventiStatisticheSection({ allTenants }) {
   const { tenant: tenantAttivo, ricaricaTag } = useTenant()
-  const [tenant,  setTenant]  = useState(tenantAttivo || allTenants[0] || '')
-  const [config,  setConfig]  = useState([])
-  const [loading, setLoading] = useState(false)
-  const [saving,  setSaving]  = useState(false)
-  const [toast,   setToast]   = useState('')
+  const [tenant,   setTenant]   = useState(tenantAttivo || allTenants[0] || '')
+  const [eventi,   setEventi]   = useState([])      // [{event_type, label, visibile, configurato, eventi}]
+  const [colonne,  setColonne]  = useState({})      // {event_type: [{nome, label, visibile, ordine}]}
+  const [scelto,   setScelto]   = useState(null)
+  const [loading,  setLoading]  = useState(false)
+  const [saving,   setSaving]   = useState(false)
+  const [toast,    setToast]    = useState('')
 
   useEffect(() => {
     if (!tenant) return
     setLoading(true)
-    fetchAPI(`/v2/analytics/${tenant}/tag_visualizzazione`)
-      .then(d => setConfig(d.config || []))
-      .catch(() => setConfig([]))
-      .finally(() => setLoading(false))
+    Promise.all([
+      fetchAPI(`/v2/analytics/${tenant}/tag_visualizzazione`).catch(() => ({ config: [] })),
+      fetchAPI(`/v2/analytics/${tenant}/column_config`).catch(() => ({ config: {} })),
+    ]).then(([tv, cc]) => {
+      const ev = tv.config || []
+      setEventi(ev)
+      setColonne(cc.config || {})
+      setScelto(s => ev.some(e => e.event_type === s) ? s : ev[0]?.event_type || null)
+    }).finally(() => setLoading(false))
   }, [tenant])
 
-  const update = (i, field, value) =>
-    setConfig(prev => prev.map((c, k) => k === i ? { ...c, [field]: value } : c))
-
-  // sposta su/giù: l'ordine è quello della tabella
-  const sposta = (i, d) => setConfig(prev => {
+  const aggiornaEvento = (i, campo, valore) =>
+    setEventi(prev => prev.map((e, k) => k === i ? { ...e, [campo]: valore } : e))
+  const spostaEvento = (i, d) => setEventi(prev => {
     const j = i + d
     if (j < 0 || j >= prev.length) return prev
     const out = [...prev]; [out[i], out[j]] = [out[j], out[i]]
     return out
+  })
+  const aggiornaColonna = (i, campo, valore) => setColonne(prev => ({
+    ...prev, [scelto]: (prev[scelto] || []).map((c, k) => k === i ? { ...c, [campo]: valore } : c),
+  }))
+  const spostaColonna = (i, d) => setColonne(prev => {
+    const cols = [...(prev[scelto] || [])], j = i + d
+    if (j < 0 || j >= cols.length) return prev
+    ;[cols[i], cols[j]] = [cols[j], cols[i]]
+    return { ...prev, [scelto]: cols }
   })
 
   const handleSave = async () => {
     setSaving(true)
     try {
       await putAPI(`/v2/analytics/${tenant}/tag_visualizzazione`, {
-        config: config.map((c, i) => ({ event_type: c.event_type, label: c.label, visibile: c.visibile, ordine: i })),
+        config: eventi.map((e, i) => ({ event_type: e.event_type, label: e.label, visibile: e.visibile, ordine: i })),
+      })
+      await putAPI(`/v2/analytics/${tenant}/column_config`, {
+        config: Object.fromEntries(Object.entries(colonne).map(([et, cols]) => [et, cols.map((c, i) => ({ ...c, ordine: i }))])),
       })
       if (tenant === tenantAttivo) ricaricaTag()
       setToast('Configurazione salvata')
@@ -413,7 +281,15 @@ function TipiEventoSection({ allTenants }) {
     finally { setSaving(false) }
   }
 
-  const cella = { padding:'0.6rem 1rem' }
+  const evScelto = eventi.find(e => e.event_type === scelto)
+  const cols = colonne[scelto] || []
+  const freccia = { marginRight:4, padding:'0.1rem 0.45rem', borderRadius:4, border:`1px solid ${T.border}`,
+    background:'transparent', color:T.muted, cursor:'pointer' }
+  const campo = { padding:'0.3rem 0.55rem', borderRadius:6, background:'rgba(255,255,255,0.05)',
+    border:`1px solid ${T.border}`, color:T.text, fontSize:'0.82rem', outline:'none', width:'100%' }
+  const titolo = { padding:'0.75rem 1rem', color:T.muted, fontFamily:'var(--font-display)', fontSize:11,
+    letterSpacing:'0.08em', textTransform:'uppercase', fontWeight:700, borderBottom:`1px solid ${T.border}` }
+
   return (
     <>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1.5rem', flexWrap:'wrap', gap:'0.75rem' }}>
@@ -434,52 +310,65 @@ function TipiEventoSection({ allTenants }) {
       {loading ? (
         <div style={{ color:T.muted, fontSize:'0.85rem' }}>Caricamento...</div>
       ) : (
-        <>
+        <div style={{ display:'grid', gridTemplateColumns:'minmax(0, 1fr) minmax(0, 1fr)', gap:'1rem', alignItems:'start' }}>
+          {/* Eventi */}
           <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.85rem' }}>
-              <thead>
-                <tr style={{ borderBottom:`1px solid ${T.border}` }}>
-                  {['Visibile','Tipo (DB)','Nome da mostrare','Eventi','Ordine'].map(h => (
-                    <th key={h} style={{ padding:'0.75rem 1rem', textAlign:'left', color:T.muted,
-                      fontFamily:'var(--font-display)', fontSize:10, letterSpacing:'0.08em',
-                      textTransform:'uppercase', fontWeight:600 }}>{h}</th>
+            <div style={titolo}>Eventi</div>
+            {eventi.map((e, i) => (
+              <div key={e.event_type} onClick={() => setScelto(e.event_type)} style={{
+                display:'grid', gridTemplateColumns:'22px minmax(0,1fr) minmax(0,1.2fr) 70px', gap:'0.6rem', alignItems:'center',
+                padding:'0.5rem 1rem', cursor:'pointer', borderBottom:'1px solid rgba(255,255,255,0.04)',
+                borderLeft:`3px solid ${e.event_type === scelto ? T.primary : 'transparent'}`,
+                background: e.event_type === scelto ? 'rgba(0,229,255,0.07)' : 'transparent', opacity: e.visibile ? 1 : 0.45 }}>
+                <input type="checkbox" checked={e.visibile} onClick={ev => ev.stopPropagation()}
+                  onChange={ev => aggiornaEvento(i, 'visibile', ev.target.checked)}
+                  style={{ width:16, height:16, cursor:'pointer', accentColor:T.primary }}/>
+                <span style={{ color:T.muted, fontFamily:'monospace', fontSize:'0.78rem', overflow:'hidden', textOverflow:'ellipsis' }}>
+                  {e.event_type}{!e.configurato && <span style={{ color:T.accent, marginLeft:6, fontSize:10 }}>NUOVO</span>}
+                </span>
+                <input type="text" value={e.label} onClick={ev => ev.stopPropagation()}
+                  onChange={ev => aggiornaEvento(i, 'label', ev.target.value)} style={campo}/>
+                <span onClick={ev => ev.stopPropagation()}>
+                  {[['↑', -1], ['↓', 1]].map(([f, d]) => (
+                    <button key={f} onClick={() => spostaEvento(i, d)} style={freccia}>{f}</button>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {config.map((c, i) => (
-                  <tr key={c.event_type} style={{ borderBottom:'1px solid rgba(255,255,255,0.04)',
-                    background: i%2===0 ? 'transparent' : 'rgba(255,255,255,0.01)', opacity: c.visibile ? 1 : 0.5 }}>
-                    <td style={cella}>
-                      <input type="checkbox" checked={c.visibile} onChange={e => update(i, 'visibile', e.target.checked)}
-                        style={{ width:16, height:16, cursor:'pointer', accentColor:T.primary }}/>
-                    </td>
-                    <td style={{ ...cella, color:T.muted, fontFamily:'monospace', fontSize:'0.8rem' }}>
-                      {c.event_type}{!c.configurato && <span style={{ color:T.accent, marginLeft:6, fontSize:10 }}>NUOVO</span>}
-                    </td>
-                    <td style={cella}>
-                      <input type="text" value={c.label} onChange={e => update(i, 'label', e.target.value)}
-                        style={{ padding:'0.35rem 0.65rem', borderRadius:6, background:'rgba(255,255,255,0.05)',
-                          border:`1px solid ${T.border}`, color:T.text, fontSize:'0.85rem', outline:'none', width:'100%', maxWidth:220 }}/>
-                    </td>
-                    <td style={{ ...cella, color:T.muted }}>{c.eventi}</td>
-                    <td style={cella}>
-                      {[['↑', -1], ['↓', 1]].map(([f, d]) => (
-                        <button key={f} onClick={() => sposta(i, d)} style={{ marginRight:4, padding:'0.15rem 0.5rem',
-                          borderRadius:4, border:`1px solid ${T.border}`, background:'transparent', color:T.muted, cursor:'pointer' }}>{f}</button>
-                      ))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                </span>
+              </div>
+            ))}
           </div>
-          <p style={{ color:T.muted, fontSize:'0.75rem', marginTop:'0.75rem' }}>
-            Valido in tutto il sito (Squadra, dettaglio partita, Giocatori, scheda giocatore). I tipi nascosti restano
-            nel database e la chat continua a usarli. I tipi NUOVI compaiono visibili finché non li configuri.
-          </p>
-        </>
+
+          {/* Statistiche dell'evento scelto nelle tabelle giocatori */}
+          <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:12, overflow:'hidden' }}>
+            <div style={titolo}>Statistiche nelle tabelle giocatori{evScelto ? ` — ${evScelto.label}` : ''}</div>
+            {!evScelto ? null : !evScelto.visibile ? (
+              <div style={{ padding:'1rem', color:T.muted, fontSize:'0.82rem' }}>
+                Evento nascosto: non compare nel sito, quindi nemmeno nelle tabelle giocatori.
+              </div>
+            ) : cols.length === 0 ? (
+              <div style={{ padding:'1rem', color:T.muted, fontSize:'0.82rem' }}>Nessuna statistica per questo evento.</div>
+            ) : cols.map((c, i) => (
+              <div key={c.nome} style={{ display:'grid', gridTemplateColumns:'22px minmax(0,1fr) minmax(0,1.2fr) 70px', gap:'0.6rem',
+                alignItems:'center', padding:'0.5rem 1rem', borderBottom:'1px solid rgba(255,255,255,0.04)', opacity: c.visibile ? 1 : 0.45 }}>
+                <input type="checkbox" checked={c.visibile} onChange={ev => aggiornaColonna(i, 'visibile', ev.target.checked)}
+                  style={{ width:16, height:16, cursor:'pointer', accentColor:T.primary }}/>
+                <span style={{ color:T.muted, fontFamily:'monospace', fontSize:'0.78rem' }}>{c.nome}</span>
+                <input type="text" value={c.label} onChange={ev => aggiornaColonna(i, 'label', ev.target.value)} style={campo}/>
+                <span>
+                  {[['↑', -1], ['↓', 1]].map(([f, d]) => (
+                    <button key={f} onClick={() => spostaColonna(i, d)} style={freccia}>{f}</button>
+                  ))}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
+
+      <p style={{ color:T.muted, fontSize:'0.75rem', marginTop:'0.75rem' }}>
+        A sinistra gli eventi: visibili, nome e ordine valgono in tutto il sito (i nascosti restano nel database e la chat
+        continua a usarli; i NUOVI sono visibili finché non li configuri). Clicca un evento per scegliere a destra quali
+        statistiche mostrare nelle tabelle giocatori (pagina Giocatori e dettaglio partita). Premi Salva.
+      </p>
 
       {toast && (
         <div style={{ position:'fixed', bottom:24, right:24, background: toast.startsWith('Errore') ? T.danger : '#10B981',
@@ -505,8 +394,7 @@ export default function AdminPage() {
 
   const TABS = [
     { id: 'utenti',   label: 'Utenti' },
-    { id: 'colonne',  label: 'Colonne Giocatori' },
-    { id: 'tipi',     label: 'Tipi di evento' },
+    { id: 'eventi',   label: 'Eventi e statistiche' },
   ]
 
   return (
@@ -532,8 +420,7 @@ export default function AdminPage() {
       </div>
 
       {tab === 'utenti'  && <UtentiSection allTenants={allTenants} />}
-      {tab === 'colonne' && <ColonneSection allTenants={allTenants} />}
-      {tab === 'tipi'    && <TipiEventoSection allTenants={allTenants} />}
+      {tab === 'eventi'  && <EventiStatisticheSection allTenants={allTenants} />}
     </div>
   )
 }

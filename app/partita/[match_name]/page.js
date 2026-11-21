@@ -1029,6 +1029,7 @@ const RUOLO_COLOR_TAB = { POR: '#F59E0B', DIF: '#3B82F6', CEN: '#10B981', ATT: '
 
 function GiocatoriTab({ data, homeTeam, awayTeam, tenant }) {
   const norm = t => (t || '').toLowerCase().trim()
+  const { tagVisibili, tagLabel } = useTenant()   // tipi di evento: visibilità, nome e ordine (Admin)
   const [colConfig, setColConfig] = useState({})
   const [activeView, setActiveView] = useState('events')
 
@@ -1042,9 +1043,11 @@ function GiocatoriTab({ data, homeTeam, awayTeam, tenant }) {
   const hasPerformance = data.some(p => p.performance != null)
 
   // Tipi evento presenti nei dati
-  const eventTypes = [...new Set(data.flatMap(p => Object.keys(p.events || {})))].sort()
+  // (senza colonne visibili in Admin → Colonne Giocatori il tipo non compare)
+  const eventTypes = tagVisibili([...new Set(data.flatMap(p => Object.keys(p.events || {})))].sort())
+    .filter(et => getCols(et).length > 0)
 
-  const getCols = (et) => {
+  function getCols(et) {
     const cfg = colConfig[et]
     if (cfg && cfg.length > 0) return cfg.filter(c => c.visibile).map(c => [c.label, c.nome])
     return SUB_COLS_FALLBACK[et] || [['tot', 'totale']]
@@ -1061,7 +1064,7 @@ function GiocatoriTab({ data, homeTeam, awayTeam, tenant }) {
               {eventTypes.map(et => (
                 <th key={et} colSpan={getCols(et).length}
                   style={{ padding: '0.3rem 0.4rem', textAlign: 'center', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.65rem', borderLeft: '1px solid var(--border)' }}>
-                  {et}
+                  {tagLabel(et)}
                 </th>
               ))}
             </tr>
@@ -1164,7 +1167,7 @@ function GiocatoriTab({ data, homeTeam, awayTeam, tenant }) {
               {perfPlayers.map((p, i) => {
                 const pf = p.performance
                 return (
-                  <tr key={p.player} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                  <tr key={`${p.team}-${p.player}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
                     <td style={{ padding: '0.4rem 0.6rem', whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                         {p.ruolo && (

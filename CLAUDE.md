@@ -14,7 +14,7 @@ No test suite is configured.
 
 ## Backend proxy
 
-All API calls go through Next.js rewrites defined in `next.config.mjs`. Currently pointing to **Railway** (`https://sports-agent-backend-production.up.railway.app`). To switch to local development, comment out the Railway rule and uncomment the localhost rule (`http://localhost:8000`).
+All API calls go through Next.js rewrites defined in `next.config.mjs`. Currently pointing to **Railway** (`https://sports-agent-backend-production.up.railway.app`). To switch to local development, comment out the Railway rule and uncomment the localhost rule (`http://localhost:8000`, or the port of the local backend in use). Never commit the localhost version: restore it with `git checkout next.config.mjs`.
 
 ## Authentication
 
@@ -56,9 +56,13 @@ KPI stagione (partite, tiri, goal, nello specchio, % specchio) sempre visibili i
 
 **`/partite`** — Lista partite con data, squadre, risultato (goal calcolati dagli aggregati), categoria. Filtro per data asc/desc. Bottone Dettaglio per ogni partita.
 
-**`/partita/[match_name]`** — Dettaglio partita (tab: sintesi, tiri, mappa tiri, passaggi, cross & lanci, duelli). Legge `?tenant=` da `useSearchParams`.
+**`/partita/[match_name]`** — Dettaglio partita (tab: sintesi, tiri, mappa campo, passaggi, cross & lanci, duelli). Legge `?tenant=` da `useSearchParams`. `source_format` `balloni` e `veo` = campo intero orizzontale (`isBalloni`), VidSwap = mezzo campo verticale.
+- **Giocatori** (`GiocatoriTab`): stessa `column_config` della pagina Giocatori (colonne, etichette, ordine), tipi e nomi da `tagVisibili` / `tagLabel`; vista Performance solo per la nostra squadra (riga = squadra + giocatore).
+- **Mappa campo → Passaggi**: al posto dei punti la **rete dei passaggi** (`GET rete_passaggi`), una squadra alla volta (default la squadra del tenant): pallino = posizione media col pallone, grandezza relativa alla vista (numero giallo = passaggi), frecce ≥ `RETE_MIN` passaggi riusciti (3 su tutta la partita, 2 nelle fasce; numero sulla freccia solo nelle fasce di 15'), linee sottili sotto soglia, subentrati tratteggiati, etichetta = cognome, tabellina sotto. Filtro **Tutta / 0-15' … 75-90'+** (`RETE_FASCE`).
 
-**`/giocatori`** — Statistiche per giocatore. Ogni riga mostra: badge ruolo colorato (POR=giallo, DIF=blu, CEN=verde, ATT=rosso) + nome completo + anno di nascita. Filtri: partita, ruolo, periodo (la categoria viene dal TenantContext globale, non c'è filtro locale ridondante). Sort automatico per ruolo (POR→DIF→CEN→ATT) poi per nome. Bottone "↓ Excel" scarica il foglio corrente. Colonne generate da `column_config` backend con fallback statici in `SUB_COLS_DEFAULT`.
+**`/giocatori`** — Statistiche per giocatore. Ogni riga mostra: badge ruolo colorato (POR=giallo, DIF=blu, CEN=verde, ATT=rosso) + nome completo + anno di nascita. Filtri: partita, ruolo, periodo (la categoria viene dal TenantContext globale, non c'è filtro locale ridondante). Sort automatico per ruolo (POR→DIF→CEN→ATT) poi per nome. Bottone "↓ Excel" scarica il foglio corrente. Colonne generate da `column_config` backend (ordine incluso) con fallback statici in `SUB_COLS_DEFAULT`. Nel tab **Tutti** le colonne **Pres.** e **Tit.** (presenze e partite da titolare, dal backend: distinta, altrimenti dati Veo). La squadra del tenant viene da `lib/squadra.js` (`squadraDelTenant`: prima parte del nome del tenant, altrimenti la squadra più frequente).
+
+**Scheda giocatore** (`components/PlayerModal.js`): tab Mappe → **Passaggi** = rete dei passaggi del giocatore (`rete_passaggi?giocatore=`) con selettore partita (`partite_giocatore`) e fasce di 15': pallino bianco = lui, frecce azzurre = dati, arancioni = ricevuti, tabellina per compagno. Giocatore con solo numero (rosa non caricata) → messaggio invece della mappa.
 
 **`/chat`** — Chatbot AI con layout a due colonne:
 - **Sidebar** (240px, sempre aperta su desktop, collassabile su mobile): titolo "Analista Tattico" con pallino verde, selettore partita filtrato per `categoria` attiva (con bottone "Deseleziona"), domande rapide contestuali, sezione **Modello AI** in fondo
@@ -74,7 +78,7 @@ KPI stagione (partite, tiri, goal, nello specchio, % specchio) sempre visibili i
 
 **`/upload`** — Upload VidSwap JSON. Sezione "Carica Rosa": selettore partita + file Excel/ODS. La costante `CATEGORIES` in `app/upload/page.js` e `CATEGORIE` in `app/admin/page.js` elencano le categorie disponibili: `['eccellenza', 'coppa', 'u21', 'u19', 'u17', 'u16', 'u15']` — da aggiornare manualmente se si aggiungono nuove categorie.
 
-**`/admin`** — Visibile solo a `role === 'admin'`. Gestione utenti: lista, crea, modifica, attiva/disattiva, elimina. Ogni utente ha `tenant` e `categoria` opzionali.
+**`/admin`** — Visibile solo a `role === 'admin'`. Gestione utenti: lista, crea, modifica, attiva/disattiva, elimina. Ogni utente ha `tenant` e `categoria` opzionali. Tab **Eventi e statistiche** (`EventiStatisticheSection`): a sinistra i tipi di evento (visibile, nome, ordine ↑ ↓ in tutto il sito → `tag_visualizzazione`; in `TenantContext`: `tagVisibili`, `tagLabel`, `ricaricaTag`), a destra le statistiche dell'evento selezionato nelle tabelle giocatori (visibile, etichetta, ordine → `column_config`); un solo Salva. Un evento nascosto sparisce anche dalle tabelle giocatori.
 
 ## Giocatori — rosa e nomi
 
@@ -99,6 +103,10 @@ Il campo `player` nella risposta è già il nome completo (o il numero se la ros
 | `GET /v2/analytics/:tenant/mappa_stagione?event_type=&category=` | GET | Squadra (mappa eventi cumulativa, qualsiasi event_type) |
 | `POST /v2/chat/ask` body: `{question, tenant, session_id?, match_name?, groq_api_key?}` | POST | Chat |
 | `POST /v2/chat/validate_key` body: `{groq_api_key}` | POST | Valida chiave Groq utente |
+| `GET /v2/analytics/:tenant/rete_passaggi/:match_name?team=&fascia=&giocatore=` | GET | Partita (mappa campo → passaggi), scheda giocatore |
+| `GET /v2/analytics/:tenant/partite_giocatore/:nome_norm` | GET | Scheda giocatore (selettore partita della rete) |
+| `GET/PUT /v2/analytics/:tenant/tag_visualizzazione` | GET/PUT | TenantContext, Admin (tipi di evento) |
+| `GET/PUT /v2/analytics/:tenant/column_config` | GET/PUT | Giocatori, Admin (colonne) |
 
 ## Shared components (`components/`)
 
