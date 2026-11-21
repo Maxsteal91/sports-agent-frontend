@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { fetchAPI } from '../../../lib/api'
 import { getUser } from '../../../lib/auth'
+import { useTenant } from '../../../lib/TenantContext'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
@@ -81,10 +82,32 @@ function GraficoSpeculare({ rows, teamA, teamB }) {
 // ─────────────────────────────────────────
 // MAPPA CAMPO GENERICA — qualsiasi event_type
 // ─────────────────────────────────────────
-function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat }) {
+// rete dei passaggi: frecce per le coppie con almeno RETE_MIN passaggi riusciti (tutta la partita /
+// fascia di 15'); le coppie sotto la soglia restano come linea sottile
+const RETE_MIN = { tutta: 3, fascia: 2 }
+// fasce di 15' (minuti di gioco), come FASCE_15 nel backend; null = tutta la partita
+const RETE_FASCE = [[null, 'Tutta'], [1, "0-15'"], [2, "15-30'"], [3, "30-45'+"], [4, "45-60'"], [5, "60-75'"], [6, "75-90'+"]]
+
+function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, matchName }) {
   const [filtroTeam, setFiltroTeam] = useState('tutti')
+  const [rete, setRete] = useState(null)
+  const [fascia, setFascia] = useState(null)
   const norm = t => (t || '').toLowerCase().trim()
   const teamAn = norm(teamA)
+
+  // Passaggi: al posto dei punti la rete (una squadra alla volta, posizione media col pallone)
+  const isRete = eventType === 'passaggi'
+  // senza scelta: la squadra del tenant (es. mazzola_pro -> mazzola), anche se gioca in trasferta
+  const nostraInTrasferta = !!tenant && norm(teamB).includes(norm(tenant).split('_')[0])
+  const reteLato = filtroTeam === 'tutti' ? (nostraInTrasferta ? 'away' : 'home') : filtroTeam
+  const reteTeam = reteLato === 'away' ? teamB : teamA
+  useEffect(() => {
+    if (!isRete || !tenant || !matchName) return
+    setRete(null)
+    fetchAPI(`/v2/analytics/${tenant}/rete_passaggi/${matchName}?team=${encodeURIComponent(norm(reteTeam))}${fascia ? `&fascia=${fascia}` : ''}`)
+      .then(setRete)
+      .catch(() => setRete({ nodi: [], archi: [] }))
+  }, [isRete, tenant, matchName, reteTeam, fascia])
 
   const filtered = data.filter(d => {
     if (filtroTeam === 'home') return norm(d.team) === teamAn
@@ -95,7 +118,8 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat }) {
   const nHome = data.filter(d => norm(d.team) === teamAn).length
   const nAway = data.filter(d => norm(d.team) !== teamAn).length
 
-  const isBalloni = sourceFormat === 'balloni'
+  // campo intero orizzontale (x = lunghezza, y = larghezza): Balloni e Veo; VidSwap = mezzo campo verticale
+  const isBalloni = sourceFormat === 'balloni' || sourceFormat === 'veo'
   const W = 580, PAD = 16
   const fw = W - PAD * 2  // 548px
   // Balloni: campo intero orizzontale (105:68) → fh proporzionale
@@ -328,6 +352,72 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat }) {
     </div>
   ) : null
 
+  const reteMin = fascia ? RETE_MIN.fascia : RETE_MIN.tutta
+  const reteSvg = (() => {
+    if (!isRete || !rete) return null
+    const col = reteTeam === teamA ? COLOR_HOME : COLOR_AWAY
+    const pos = Object.fromEntries(rete.nodi.map(n => [n.numero, { x: sx(n.x), y: sy(n.y) }]))
+    // grandezza relativa alla vista: chi passa di piu' in questa fascia ha il pallino piu' grande
+    const pass = rete.nodi.map(n => n.passaggi || 0)
+    const minP = Math.min(...pass), maxP = Math.max(...pass)
+    const raggio = n => 7 + 15 * Math.sqrt(maxP > minP ? ((n.passaggi || 0) - minP) / (maxP - minP) : 0.5)
+    const nodo = Object.fromEntries(rete.nodi.map(n => [n.numero, n]))
+    const tutti = rete.archi.filter(a => pos[a.da] && pos[a.a])
+    const archi = tutti.filter(a => a.n >= reteMin)
+    const deboli = tutti.filter(a => a.n < reteMin)
+    const maxN = Math.max(1, ...archi.map(a => a.n))
+    const alone = { paintOrder: 'stroke', stroke: 'rgba(0,0,0,0.7)', strokeWidth: 3 }
+    return (
+      <g>
+        <defs>
+          <marker id="freccia-rete" viewBox="0 0 10 10" refX={9} refY={5} markerWidth={9} markerHeight={9}
+            markerUnits="userSpaceOnUse" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill={col} />
+          </marker>
+        </defs>
+        {deboli.map((a, i) => {
+          const p = pos[a.da], q = pos[a.a]
+          return <line key={`d${i}`} x1={p.x} y1={p.y} x2={q.x} y2={q.y} stroke={col} strokeWidth={0.8} opacity={0.2} />
+        })}
+        {archi.map((a, i) => {
+          const p = pos[a.da], q = pos[a.a]
+          const dx = q.x - p.x, dy = q.y - p.y, L = Math.hypot(dx, dy) || 1
+          const ox = -dy / L * 3, oy = dx / L * 3          // A->B e B->A affiancate
+          const r1 = raggio(nodo[a.da]), r2 = raggio(nodo[a.a]) + 3
+          const x1 = p.x + dx / L * r1 + ox, y1 = p.y + dy / L * r1 + oy
+          const x2 = q.x - dx / L * r2 + ox, y2 = q.y - dy / L * r2 + oy
+          return (
+            <g key={i}>
+              <line x1={x1} y1={y1} x2={x2} y2={y2}
+                stroke={col} strokeWidth={1 + 5 * a.n / maxN} opacity={0.35 + 0.5 * a.n / maxN}
+                strokeLinecap="round" markerEnd="url(#freccia-rete)" />
+              {fascia && L > 45 && (   /* numero sulla freccia solo nelle fasce di 15' */
+                <text x={(x1 + x2) / 2 + ox * 2.5} y={(y1 + y2) / 2 + oy * 2.5 + 3} textAnchor="middle"
+                  fontSize={9} fontWeight="bold" fill="white" style={alone}>{a.n}</text>
+              )}
+            </g>
+          )
+        })}
+        {rete.nodi.map(n => {
+          const { x, y } = pos[n.numero], r = raggio(n)
+          const cognome = (n.cognome || (n.nome || '').split(' ')[0]).toUpperCase()   // anagrafica: "Cognome Nome"
+          return (
+            <g key={n.numero}>
+              <title>{`${n.nome || '#' + n.numero}: ${n.passaggi} passaggi (${n.riusciti} riusciti), ${n.ricevuti} ricevuti`}</title>
+              {n.subentrato
+                ? <circle cx={x} cy={y} r={r} fill={col} fillOpacity={0.35} stroke="white" strokeWidth={1.5} strokeDasharray="3,2" />
+                : <circle cx={x} cy={y} r={r} fill={col} opacity={0.9} stroke="white" strokeWidth={1.5} />}
+              <text x={x} y={y + 4} textAnchor="middle" fontSize={11} fontWeight="bold" fill={n.subentrato ? 'white' : '#0B1220'}>{n.numero}</text>
+              <text x={x + r * 0.75 + 2} y={y - r * 0.75} fontSize={10} fontWeight="bold" fill="#FDE68A" style={alone}>{n.passaggi}</text>
+              {cognome && <text x={x} y={y + r + 11} textAnchor="middle" fontSize={9} fill="white"
+                style={{ paintOrder: 'stroke', stroke: 'rgba(0,0,0,0.6)', strokeWidth: 2 }}>{cognome}</text>}
+            </g>
+          )
+        })}
+      </g>
+    )
+  })()
+
   const legendItems = (() => {
     if (eventType === 'shot') return []  // gestita da shotSymbolLegend
     if (eventType === 'cross') return []  // gestita inline sotto
@@ -338,32 +428,81 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat }) {
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
       <div style={{ display: 'flex', gap: 8, alignSelf: 'flex-start', alignItems: 'center', width: '100%' }}>
         {[
-          { key: 'tutti', label: 'Entrambe', color: '#94A3B8', n: data.length },
+          ...(isRete ? [] : [{ key: 'tutti', label: 'Entrambe', color: '#94A3B8', n: data.length }]),
           { key: 'home',  label: teamA,      color: COLOR_HOME, n: nHome },
           { key: 'away',  label: teamB,      color: COLOR_AWAY, n: nAway },
-        ].map(opt => (
+        ].map(opt => {
+          const attivo = isRete ? opt.key === reteLato : filtroTeam === opt.key
+          return (
           <button key={opt.key} onClick={() => setFiltroTeam(opt.key)} style={{
             padding: '6px 16px', borderRadius: 6,
-            border: `1.5px solid ${filtroTeam === opt.key ? opt.color : 'rgba(255,255,255,0.12)'}`,
-            background: filtroTeam === opt.key ? `${opt.color}18` : 'transparent',
-            color: filtroTeam === opt.key ? opt.color : '#64748B',
+            border: `1.5px solid ${attivo ? opt.color : 'rgba(255,255,255,0.12)'}`,
+            background: attivo ? `${opt.color}18` : 'transparent',
+            color: attivo ? opt.color : '#64748B',
             cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: 13,
             fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', transition: 'all 0.15s',
           }}>
             {opt.label} <span style={{ fontWeight: 400, fontSize: 11 }}>({opt.n})</span>
           </button>
-        ))}
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#475569' }}>{filtered.length} eventi</span>
+          )
+        })}
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#475569' }}>
+          {isRete ? (rete ? `${rete.archi.filter(a => a.n >= reteMin).length} collegamenti` : 'Caricamento...') : `${filtered.length} eventi`}
+        </span>
       </div>
+
+      {isRete && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignSelf: 'flex-start' }}>
+          {RETE_FASCE.map(([k, label]) => (
+            <button key={label} onClick={() => setFascia(k)} style={{
+              padding: '4px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
+              border: `1px solid ${fascia === k ? 'var(--primary)' : 'rgba(255,255,255,0.12)'}`,
+              background: fascia === k ? 'rgba(0,229,255,0.1)' : 'transparent',
+              color: fascia === k ? 'var(--primary)' : '#64748B',
+            }}>{label}</button>
+          ))}
+        </div>
+      )}
 
       <div style={{ borderRadius: 8, overflow: 'hidden', border: '1.5px solid rgba(255,255,255,0.15)', boxShadow: '0 4px 24px rgba(0,0,0,0.5)' }}>
         <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
           {isBalloni ? balloniField : vidswapField}
-          {filtered.map((d, i) => marker(d, i))}
+          {isRete ? reteSvg : filtered.map((d, i) => marker(d, i))}
         </svg>
       </div>
 
-      {shotSymbolLegend || (
+      {isRete ? (
+        <div style={{ fontSize: 11, color: '#64748B', textAlign: 'center', maxWidth: W }}>
+          Pallino = posizione media del giocatore {rete?.fonte === 'tracking' ? 'quando la squadra ha il pallone' : '(media dei punti da cui passa)'},
+          più grande = più passaggi in questa vista (numero giallo); tratteggiato = entrato a partita in corso.
+          Frecce = almeno {reteMin} passaggi riusciti{fascia ? ' (numero sulla freccia)' : ''}, linee sottili = meno.
+          {sourceFormat === 'veo' && ' La nostra squadra attacca verso destra, l\'avversaria verso sinistra.'}
+          {rete && rete.nodi.length > 0 && (
+            <table style={{ margin: '12px auto 0', borderCollapse: 'collapse', fontSize: 12, color: '#CBD5E1' }}>
+              <thead>
+                <tr style={{ color: '#64748B', textAlign: 'right' }}>
+                  <th style={{ textAlign: 'left', padding: '3px 10px' }}>Giocatore</th>
+                  <th style={{ padding: '3px 10px' }}>Passaggi</th>
+                  <th style={{ padding: '3px 10px' }}>Riusciti</th>
+                  <th style={{ padding: '3px 10px' }}>Ricevuti</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rete.nodi.map(n => (
+                  <tr key={n.numero} style={{ borderTop: '1px solid rgba(255,255,255,0.06)', textAlign: 'right' }}>
+                    <td style={{ textAlign: 'left', padding: '3px 10px' }}>
+                      {n.numero} {n.nome || ''}{n.subentrato ? ' (sub.)' : ''}
+                    </td>
+                    <td style={{ padding: '3px 10px' }}>{n.passaggi}</td>
+                    <td style={{ padding: '3px 10px' }}>{n.riusciti}</td>
+                    <td style={{ padding: '3px 10px' }}>{n.ricevuti}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ) : shotSymbolLegend || (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11, color: '#64748B', justifyContent: 'center' }}>
           {legendItems.map(([col, label]) => (
             <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -509,6 +648,7 @@ function MappaTiriV2({ data, teamA, teamB }) {
 export default function PartitaPage() {
   const { match_name }  = useParams()
   const searchParams    = useSearchParams()
+  const { tagVisibili, tagLabel } = useTenant()   // tipi di evento visibili e nomi (Admin -> Tipi di evento)
 
   // Tenant: priorità all'utente loggato, fallback alla URL
   const urlTenant = searchParams.get('tenant') || 'mazzola'
@@ -587,9 +727,9 @@ export default function PartitaPage() {
   const eventiPresenti = new Set(aggregati.filter(a => a.totale > 0).map(a => a.event_type))
 
   // Fallback mappa: se /tipi non è ancora disponibile, usa gli event type dagli aggregati
-  const tipiEffettivi = tipiCoordinate.length > 0
+  const tipiEffettivi = tagVisibili(tipiCoordinate.length > 0
     ? tipiCoordinate
-    : [...eventiPresenti].filter(et => ['shot','cross','corner','gkout','freekick'].includes(et))
+    : [...eventiPresenti].filter(et => ['shot','cross','corner','gkout','freekick'].includes(et)))
   const hasMappaData = tipiEffettivi.length > 0
 
   const TABS = [
@@ -737,13 +877,13 @@ export default function PartitaPage() {
                     color: mappaEventType === et ? 'var(--primary)' : 'var(--text-muted)',
                     cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '0.8rem',
                     fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', transition: 'all 0.15s',
-                  }}>{et}</button>
+                  }}>{tagLabel(et)}</button>
                 ))}
               </div>
               {mappaLoading ? (
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Caricamento...</div>
               ) : (
-                <MappaCampoV2 data={mappaData} eventType={mappaEventType} teamA={teamA} teamB={teamB} sourceFormat={partita?.source_format} />
+                <MappaCampoV2 data={mappaData} eventType={mappaEventType} teamA={teamA} teamB={teamB} sourceFormat={partita?.source_format} tenant={tenant} matchName={match_name} />
               )}
             </>
           )}

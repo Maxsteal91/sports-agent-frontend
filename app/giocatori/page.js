@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { fetchAPI } from '../../lib/api'
+import { squadraDelTenant } from '../../lib/squadra'
 import { getUser } from '../../lib/auth'
 import { useTenant } from '../../lib/TenantContext'
 import * as XLSX from 'xlsx'
@@ -18,13 +19,15 @@ const SUB_COLS_DEFAULT = {
 }
 
 export default function GiocatoriPage() {
-  const { tenant, ready, categoria } = useTenant()
+  const { tenant, ready, categoria, tagVisibili, tagLabel } = useTenant()
   const [user,              setUser]              = useState(null)
   const [matchFiltro,       setMatchFiltro]       = useState(null)
   const [periodo,           setPeriodo]           = useState('Totale')
   const [eventoTab,         setEventoTab]         = useState(null)
   const [data,              setData]              = useState([])
-  const [eventTypes,        setEventTypes]        = useState([])
+  const [eventTypesTutti,   setEventTypes]        = useState([])
+  // tipi di evento visibili e ordinati secondo l'admin (Admin -> Tipi di evento)
+  const eventTypes = tagVisibili(eventTypesTutti)
   const [partite,           setPartite]           = useState([])
   const [loading,           setLoading]           = useState(false)
   const [homeTeam,          setHomeTeam]          = useState(null)
@@ -51,16 +54,9 @@ export default function GiocatoriPage() {
       .then(res => {
         const ps = res.data || []
         setPartite(ps)
-        // Il team del tenant appare in ogni partita (home o away) → è il più frequente
-        if (ps.length > 0) {
-          const counts = {}
-          ps.forEach(p => {
-            if (p.home_team) counts[p.home_team] = (counts[p.home_team] || 0) + 1
-            if (p.away_team) counts[p.away_team] = (counts[p.away_team] || 0) + 1
-          })
-          const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || null
-          setHomeTeam(top)
-        }
+        // Squadra del tenant: quella col nome del tenant (es. mazzola_pro -> "V. Mazzola"),
+        // altrimenti la piu' frequente nelle partite
+        if (ps.length > 0) setHomeTeam(squadraDelTenant(tenant, ps))
       })
       .catch(() => setPartite([]))
   }, [tenant])
@@ -129,7 +125,7 @@ export default function GiocatoriPage() {
       const evts = p.events?.[et]
       if (!evts) return
       getCols(et).forEach(([label, field]) => {
-        row[`${et} — ${label}`] = evts[field] ?? 0
+        row[`${tagLabel(et)} — ${label}`] = evts[field] ?? 0
       })
     })
     if (p.performance) {
@@ -178,11 +174,11 @@ export default function GiocatoriPage() {
     if (!allRows.length) return
 
     // Assicura che tutte le colonne evento compaiano in ogni riga (0 se assente)
-    const etList = [...allEtypes].sort()
+    const etList = tagVisibili([...allEtypes])
     allRows.forEach(r => {
       etList.forEach(et => {
         getCols(et).forEach(([label]) => {
-          const key = `${et} — ${label}`
+          const key = `${tagLabel(et)} — ${label}`
           if (!(key in r)) r[key] = 0
         })
       })
@@ -310,7 +306,7 @@ export default function GiocatoriPage() {
               color: eventoTab === et ? 'var(--primary)' : 'var(--text-muted)',
               cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '0.9rem',
               fontWeight: 600, letterSpacing: '0.03em', textTransform: 'capitalize',
-            }}>{et === 'all' ? 'Tutti' : et}</button>
+            }}>{et === 'all' ? 'Tutti' : tagLabel(et)}</button>
           ))}
           {hasPerformance && (
             <button onClick={() => setEventoTab('performance')} style={{
@@ -381,10 +377,13 @@ export default function GiocatoriPage() {
                   <>
                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                       <th style={thStyle('left')} rowSpan={2}>Giocatore</th>
+                      {/* presenze e titolarita': distinta della partita, altrimenti dati Veo */}
+                      <th style={thStyle('right')} rowSpan={2} title="Partite giocate">Pres.</th>
+                      <th style={thStyle('right')} rowSpan={2} title="Partite da titolare">Tit.</th>
                       {eventTypes.map(et => (
                         <th key={et} colSpan={getAllCols(et).length}
                           style={{ ...thStyle('center'), borderLeft: '1px solid var(--border)', paddingBottom: '0.25rem', textTransform: 'capitalize' }}>
-                          {et}
+                          {tagLabel(et)}
                         </th>
                       ))}
                     </tr>
@@ -431,6 +430,11 @@ export default function GiocatoriPage() {
                         )}
                       </div>
                     </td>
+                    {isAll && ['presenze', 'titolare'].map(k => (
+                      <td key={k} style={{ padding: '0.55rem 0.6rem', textAlign: 'right', color: 'var(--text)', fontWeight: 600 }}>
+                        {p[k] ?? <span style={{ opacity: 0.25 }}>—</span>}
+                      </td>
+                    ))}
                     {isAll
                       ? eventTypes.flatMap(et => getAllCols(et).map(([label, field], ci) => {
                           const val = p.events[et]?.[field] ?? 0

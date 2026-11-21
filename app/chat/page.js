@@ -173,7 +173,8 @@ function BarChartViz({ viz }) {
 }
 
 function FieldMapViz({ viz }) {
-  const isBalloni = viz.source_format === 'balloni'
+  // campo intero orizzontale: Balloni e Veo
+  const isBalloni = viz.source_format === 'balloni' || viz.source_format === 'veo'
   const et = viz.event_type || 'shot'
   const G = '#071A0A', L = '#1A5025'
 

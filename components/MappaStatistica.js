@@ -55,8 +55,9 @@ function buildGrid(shots, isLeft, cols = 5, rows = 6) {
   const grid = Array.from({ length: rows }, () => Array(cols).fill(0))
   shots.forEach(s => {
     if (s.x < xMin || s.x > xMin + 50) return
-    const col = Math.min(Math.floor((s.x - xMin) / xStep), cols - 1)
-    const row = Math.min(Math.floor(s.y / yStep), rows - 1)
+    // punti sul bordo o appena fuori (es. punizioni sulla linea, dati Veo): nella casella di bordo
+    const col = Math.max(0, Math.min(Math.floor((s.x - xMin) / xStep), cols - 1))
+    const row = Math.max(0, Math.min(Math.floor(s.y / yStep), rows - 1))
     grid[row][col]++
   })
   const maxCount = Math.max(...grid.flat(), 1)

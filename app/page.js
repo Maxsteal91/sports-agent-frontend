@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { fetchAPI } from '../lib/api'
+import { squadraDelTenant } from '../lib/squadra'
 import { getUser } from '../lib/auth'
 import { useTenant } from '../lib/TenantContext'
 import KpiCard from '../components/KpiCard'
@@ -19,7 +20,7 @@ const BAR_COLORS = {
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
 
 export default function SquadraPage() {
-  const { tenant, ready, categoria } = useTenant()
+  const { tenant, ready, categoria, tagVisibili, tagLabel } = useTenant()
   const [user,        setUser]       = useState(null)
   const [partite,     setPartite]    = useState([])
   const [kpis,        setKpis]       = useState(null)
@@ -70,18 +71,9 @@ export default function SquadraPage() {
         if (byFreq.length > 0 && byFreq[0][1].size > (byFreq[1]?.[1].size ?? 0)) {
           return byFreq[0][0]
         }
-        // Strategia 2 (fallback): corrispondenza nome con tenant
-        const tenantBase = tenant.replace(/_\d{4}$/, '').replace(/_/g, '')
-        const counts = {}
-        allPs.forEach(p => {
-          if (p.home_team) counts[p.home_team] = (counts[p.home_team] || 0) + 1
-          if (p.away_team) counts[p.away_team] = (counts[p.away_team] || 0) + 1
-        })
-        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1])
-        const byName = sorted.find(([name]) =>
-          name && (name.replace(/\s/g,'').includes(tenantBase) || tenantBase.includes(name.replace(/\s/g,'')))
-        )
-        return byName?.[0] || sorted[0]?.[0] || tenant
+        // Strategia 2 (fallback): squadra col nome del tenant (es. mazzola_pro -> "V. Mazzola"),
+        // altrimenti la piu' frequente
+        return squadraDelTenant(tenant, allPs) || tenant
       })()
       setTenantTeam(top)
 
@@ -265,9 +257,9 @@ export default function SquadraPage() {
       {activeTab === 'confronto' && (
         <>
           {/* Selettore evento */}
-          {eventiDisponibili.length > 0 && (
+          {tagVisibili(eventiDisponibili).length > 0 && (
             <div style={{ marginBottom: '1.25rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {eventiDisponibili.map(e => (
+              {tagVisibili(eventiDisponibili).map(e => (
                 <button key={e} onClick={() => setEvento(e)} style={{
                   padding: '0.4rem 0.9rem', borderRadius: '8px',
                   border: `1px solid ${evento === e ? 'var(--primary)' : 'var(--border)'}`,
@@ -275,7 +267,7 @@ export default function SquadraPage() {
                   color: evento === e ? 'var(--primary)' : 'var(--text-muted)',
                   cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '0.85rem',
                   fontWeight: 600, letterSpacing: '0.03em', textTransform: 'capitalize',
-                }}>{e}</button>
+                }}>{tagLabel(e)}</button>
               ))}
             </div>
           )}
