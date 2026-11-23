@@ -279,6 +279,24 @@ function RetePassaggiGiocatore({ tenant, nomeNorm, matchFiltro }) {
         <span style={{ color: COL_RICEVUTI }}>← passaggi ricevuti</span>
         <span>tratteggiato = subentrato</span>
       </div>
+      {(() => {
+        // riepilogo del giocatore (segue la fascia): stessi conteggi delle colonne Riusciti / Non riusciti
+        const io = rete?.nodi.find(n => n.numero === rete.giocatore)
+        if (!io) return null
+        const voci = [['Passaggi', io.passaggi], ['Riusciti', io.riusciti], ['Non riusciti', io.passaggi - io.riusciti],
+          ['%', io.passaggi ? `${Math.round(100 * io.riusciti / io.passaggi)}%` : '–'], ['Ricevuti', io.ricevuti]]
+        return (
+          <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: '0.75rem', margin: '0.3rem 0 0.5rem',
+            padding: '4px 0', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+            {voci.map(([k, v]) => (
+              <div key={k} style={{ textAlign: 'center' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>{k}</div>
+                <div style={{ fontWeight: 700, color: k === 'Ricevuti' ? COL_RICEVUTI : 'var(--text)' }}>{v}</div>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
       {compagni.length > 0 && (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', color: 'var(--text)' }}>
           <thead>

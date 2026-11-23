@@ -737,7 +737,8 @@ export default function PartitaPage() {
     ...(eventiPresenti.has('shot')                                  ? ['tiri']          : []),
     ...(hasMappaData                                                 ? ['mappa campo']   : []),
     ...(eventiPresenti.has('passaggi')                              ? ['passaggi']      : []),
-    ...(eventiPresenti.has('cross') || eventiPresenti.has('lanci')  ? ['cross & lanci'] : []),
+    ...(eventiPresenti.has('cross') || eventiPresenti.has('lanci')  ? ['cross']         : []),
+    ...(eventiPresenti.has('calcio_piazzato')                       ? ['calci piazzati'] : []),
     ...(eventiPresenti.has('duelli') || eventiPresenti.has('dribbling') || eventiPresenti.has('palle recuperate') ? ['duelli'] : []),
     ...(hasGiocatori                                                 ? ['giocatori']     : []),
   ]
@@ -934,39 +935,80 @@ export default function PartitaPage() {
       )}
 
       {/* ── TAB: CROSS & LANCI ── */}
-      {tab === 'cross & lanci' && (
-        <Section title="Cross e Lanci">
-          <GraficoSpeculare
-            teamA={teamA} teamB={teamB}
-            rows={[
-              { label: 'Cross Totali',     a: agg('cross', teamA).totale     ?? 0, b: agg('cross', teamB).totale     ?? 0 },
-              { label: 'Cross Completati', a: agg('cross', teamA).completati ?? 0, b: agg('cross', teamB).completati ?? 0 },
-              { label: 'Lanci Totali',     a: agg('lanci', teamA).totale     ?? 0, b: agg('lanci', teamB).totale     ?? 0 },
-              { label: 'Lanci Completati', a: agg('lanci', teamA).completati ?? 0, b: agg('lanci', teamB).completati ?? 0 },
-            ]}
-          />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1.5rem' }}>
-            {[teamA, teamB].map((team, i) => {
-              const color = i === 0 ? COLOR_HOME : COLOR_AWAY
-              const cross = agg('cross', team)
-              const lanci = agg('lanci', team)
-              return (
-                <div key={team}>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 700, color, marginBottom: '0.75rem' }}>{team}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                    <StatBox label="Cross"          value={cross.totale}      color={color} />
-                    <StatBox label="Cross Comp."    value={cross.completati}  color={color} />
-                    <StatBox label="Cross %"        value={cross.percentuale ? cross.percentuale + '%' : '0%'} color={color} />
-                    <StatBox label="Lanci"          value={lanci.totale}      color={color} />
-                    <StatBox label="Lanci Comp."    value={lanci.completati}  color={color} />
-                    <StatBox label="Lanci %"        value={lanci.percentuale ? lanci.percentuale + '%' : '0%'} color={color} />
+      {tab === 'cross' && (() => {
+        // origine dei cross (Veo): extra "azione", "sviluppo_<piazzato>", "seconda_palla_<piazzato>"
+        const origine = (team, pref) => Object.entries(agg('cross', team).extra || {})
+          .filter(([k]) => k.startsWith(pref)).reduce((t, [, v]) => t + (v || 0), 0)
+        const haOrigine = [teamA, teamB].some(t => origine(t, 'azione') + origine(t, 'sviluppo') + origine(t, 'seconda_palla') > 0)
+        const haLanci = eventiPresenti.has('lanci')
+        return (
+          <Section title="Cross">
+            <GraficoSpeculare
+              teamA={teamA} teamB={teamB}
+              rows={[
+                { label: 'Cross Totali',     a: agg('cross', teamA).totale     ?? 0, b: agg('cross', teamB).totale     ?? 0 },
+                { label: 'Cross Riusciti',   a: agg('cross', teamA).completati ?? 0, b: agg('cross', teamB).completati ?? 0 },
+                ...(haOrigine ? [
+                  { label: 'Da azione',                     a: origine(teamA, 'azione'),        b: origine(teamB, 'azione') },
+                  { label: 'Sviluppo calcio piazzato',      a: origine(teamA, 'sviluppo'),      b: origine(teamB, 'sviluppo') },
+                  { label: 'Seconda palla calcio piazzato', a: origine(teamA, 'seconda_palla'), b: origine(teamB, 'seconda_palla') },
+                ] : []),
+                ...(haLanci ? [
+                  { label: 'Lanci Totali',     a: agg('lanci', teamA).totale     ?? 0, b: agg('lanci', teamB).totale     ?? 0 },
+                  { label: 'Lanci Completati', a: agg('lanci', teamA).completati ?? 0, b: agg('lanci', teamB).completati ?? 0 },
+                ] : []),
+              ]}
+            />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1.5rem' }}>
+              {[teamA, teamB].map((team, i) => {
+                const color = i === 0 ? COLOR_HOME : COLOR_AWAY
+                const cross = agg('cross', team)
+                const lanci = agg('lanci', team)
+                return (
+                  <div key={team}>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 700, color, marginBottom: '0.75rem' }}>{team}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                      <StatBox label="Cross"          value={cross.totale}      color={color} />
+                      <StatBox label="Cross Riusciti" value={cross.completati}  color={color} />
+                      <StatBox label="Cross %"        value={cross.percentuale ? cross.percentuale + '%' : '0%'} color={color} />
+                      {haOrigine && <StatBox label="Da azione" value={origine(team, 'azione')} color={color} />}
+                      {haLanci && <StatBox label="Lanci"       value={lanci.totale}      color={color} />}
+                      {haLanci && <StatBox label="Lanci Comp." value={lanci.completati}  color={color} />}
+                    </div>
                   </div>
-                </div>
-              )
-            })}
-          </div>
-        </Section>
-      )}
+                )
+              })}
+            </div>
+          </Section>
+        )
+      })()}
+
+      {/* ── TAB: CALCI PIAZZATI (Veo: angoli, punizioni entro 60 m, rimesse lunghe in attacco) ── */}
+      {tab === 'calci piazzati' && (() => {
+        const ex = (team, k) => agg('calcio_piazzato', team).extra?.[k] ?? 0
+        const righe = [
+          ['Calci piazzati', t => agg('calcio_piazzato', t).totale ?? 0],
+          ['Angoli', t => ex(t, 'angolo')],
+          ['Punizioni', t => ex(t, 'punizione')],
+          ['Rimesse lunghe', t => ex(t, 'rimessa')],
+          ['Battuta diretta in area', t => ex(t, 'diretta')],
+          ['Battuta corta', t => ex(t, 'corta')],
+          ['Tiro diretto', t => ex(t, 'tiro_diretto')],
+          ['Primo tocco di un compagno', t => agg('calcio_piazzato', t).completati ?? 0],
+          ['Con tiro', t => ex(t, 'con_tiro')],
+        ]
+        return (
+          <Section title="Calci piazzati in attacco">
+            <GraficoSpeculare teamA={teamA} teamB={teamB}
+              rows={righe.map(([label, f]) => ({ label, a: f(teamA), b: f(teamB) }))} />
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '1rem' }}>
+              Angoli, punizioni entro 60 m dalla porta attaccata e rimesse laterali lunghe (dalla trequarti fino in area).
+              "Con tiro" = tiro della stessa squadra nello stesso possesso entro 15 s. I cross nati da un calcio piazzato
+              battuto corto o dalla seconda palla sono nel tab Cross.
+            </p>
+          </Section>
+        )
+      })()}
 
       {/* ── TAB: DUELLI ── */}
       {tab === 'duelli' && (

@@ -216,7 +216,7 @@ export default function SquadraPage() {
           { id: 'shot',      label: 'TIRI' },
           { id: 'gol',       label: 'GOL' },
           { id: 'cross',     label: 'CROSS' },
-          { id: 'freekick',  label: 'PUNIZIONI' },
+          { id: 'piazzati',  label: 'CALCI PIAZZATI' },
           { id: 'gkout',     label: 'USCITE' },
         ].map(item => (
           <button key={item.id} onClick={() => setActiveTab(item.id)} style={{

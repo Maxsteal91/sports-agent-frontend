@@ -22,7 +22,9 @@ const EVENT_TYPES = [
   { id: 'shot',     label: 'TIRI',     apiType: 'shot',     statLabel: ['Tiri fatti', 'Tiri subiti'] },
   { id: 'gol',      label: 'GOL',      apiType: null,       statLabel: ['Gol segnati', 'Gol subiti'] },
   { id: 'cross',    label: 'CROSS',    apiType: 'cross',    statLabel: ['Cross fatti', 'Cross subiti'] },
-  { id: 'freekick', label: 'PUNIZIONI', apiType: 'freekick', statLabel: ['Punizioni fatte', 'Punizioni subite'] },
+  // calci piazzati (Veo); nei tenant senza (es. file Balloni) si ripiega sulle punizioni
+  { id: 'piazzati', label: 'CALCI PIAZZATI', apiType: 'calcio_piazzato', fallbackType: 'freekick',
+    statLabel: ['Calci piazzati fatti', 'Calci piazzati subiti'] },
   { id: 'gkout',    label: 'USCITE',   apiType: 'gkout',    statLabel: ['Uscite fatte', 'Uscite avversari'] },
 ]
 
@@ -272,6 +274,7 @@ export default function MappaStatistica({ tenant, categoria, tenantTeam, eventTy
   const [period, setPeriod] = useState('Tutto')
   const [loading,     setLoading]     = useState(false)
   const [data,        setData]        = useState([])
+  const [tipo,        setTipo]        = useState('tutti')     // calci piazzati: angolo / punizione / rimessa
   const cacheRef = useRef({})
 
   const catParam = categoria ? `&category=${encodeURIComponent(categoria)}` : ''
@@ -295,9 +298,10 @@ export default function MappaStatistica({ tenant, categoria, tenantTeam, eventTy
     }
 
     setLoading(true)
-    fetchAPI(`/v2/analytics/${tenant}/mappa_stagione?event_type=${fetchType}${catParam}`)
-      .then(res => {
-        const raw = res.data || []
+    const carica = t => fetchAPI(`/v2/analytics/${tenant}/mappa_stagione?event_type=${t}${catParam}`).then(res => res.data || [])
+    carica(fetchType)
+      .then(raw => raw.length || !et.fallbackType ? raw : carica(et.fallbackType))
+      .then(raw => {
         cacheRef.current[fetchType] = raw
         setData(eventTypeId === 'gol' ? raw.filter(s => isGoal(s.outcome)) : raw)
         setLoading(false)
@@ -307,13 +311,15 @@ export default function MappaStatistica({ tenant, categoria, tenantTeam, eventTy
 
   const { ourEvents, theirEvents } = useMemo(() => {
     if (!data.length || !tenantTeam) return { ourEvents: [], theirEvents: [] }
-    const filtered = period === 'Tutto' ? data : data.filter(s => s.period === period)
+    const perTipo = tipo === 'tutti' ? data : data.filter(s => s.tipo === tipo)
+    const filtered = period === 'Tutto' ? perTipo : perTipo.filter(s => s.period === period)
     const normalized = normalizeShotsForDisplay(filtered, tenantTeam)
     return {
       ourEvents:   normalized.filter(s => s.team?.toLowerCase() === tenantTeam?.toLowerCase()),
       theirEvents: normalized.filter(s => s.team?.toLowerCase() !== tenantTeam?.toLowerCase()),
     }
-  }, [data, tenantTeam, period])
+  }, [data, tenantTeam, period, tipo])
+  const haTipi = data.some(s => s.tipo)
 
   const ourLabel  = tenantTeam ? cap(tenantTeam.replace(/_\d{4}$/, '')) : 'Noi'
   const currentET = EVENT_TYPES.find(e => e.id === eventTypeId)
@@ -326,6 +332,10 @@ export default function MappaStatistica({ tenant, categoria, tenantTeam, eventTy
           <button key={opt.value} onClick={() => setPeriod(opt.value)} style={pillStyle(period === opt.value)}>
             {opt.label}
           </button>
+        ))}
+        {haTipi && <span style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 0.25rem' }} />}
+        {haTipi && [['tutti', 'Tutti'], ['angolo', 'Angoli'], ['punizione', 'Punizioni'], ['rimessa', 'Rimesse lunghe']].map(([v, l]) => (
+          <button key={v} onClick={() => setTipo(v)} style={pillStyle(tipo === v)}>{l}</button>
         ))}
         <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: '0.78rem', alignSelf: 'center' }}>
           <span style={{ color: CYAN }}>■</span> {ourLabel} ({ourEvents.length})&nbsp;&nbsp;
