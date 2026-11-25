@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { fetchAPI } from '../lib/api'
@@ -8,7 +8,7 @@ import SintesiGruppi from './SintesiGruppi'
 import CampoAnalisi from './CampoAnalisi'
 import { valore, sommaRighe, etichetta } from '../lib/sintesi'
 
-// Sezione Squadra per i tenant con partite Veo: risultati, poi tre tab come la partita
+// Sezione Stagione per i tenant con partite Veo: riga ferma in alto (numeri, filtro, tab), partite, poi tre tab come la partita
 //   Sintesi stagione  la sintesi a gruppi, noi contro avversari, totale e media a partita
 //   Campo             lo stesso campo della partita, con i punti della stagione
 //   Andamento         l'evento scelto partita per partita
@@ -59,41 +59,41 @@ export default function SquadraVeo({ tenant, categoria, partite, noi }) {
 
   return (
     <div>
-      <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.9rem', letterSpacing: '0.04em', textTransform: 'uppercase', margin: '0 0 1rem', color: 'var(--text)' }}>
-        {noi} · Stagione
-      </h1>
-      {/* risultati */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-        {[[scelte.length, 'Partite'], [`${vnp('V')} · ${vnp('N')} · ${vnp('P')}`, 'Vinte · Pari · Perse'],
-          [`${scelte.reduce((s, p) => s + p.gf, 0)} · ${scelte.reduce((s, p) => s + p.gs, 0)}`, 'Gol fatti · subiti'],
-          [3 * vnp('V') + vnp('N'), 'Punti']].map(([val, lab]) => (
-          <div key={lab} style={kpi}><b style={kpiNum}>{val}</b><span style={kpiLab}>{lab}</span></div>
+      {/* una riga ferma in alto (sotto la barra del sito): squadra, numeri della stagione, filtro e tab */}
+      <div style={{ position: 'sticky', top: 60, zIndex: 20, background: 'var(--bg)', margin: '0 -2rem 12px', padding: '12px 2rem 10px',
+        borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap' }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 26, letterSpacing: '0.03em', textTransform: 'uppercase', color: NOI }}>
+          {noi} <span style={{ color: 'var(--text-muted)', fontSize: 16 }}>· stagione</span>
+        </div>
+        {[[scelte.length, 'partite'], [`${vnp('V')} · ${vnp('N')} · ${vnp('P')}`, 'V · N · P'],
+          [`${scelte.reduce((s, p) => s + p.gf, 0)} · ${scelte.reduce((s, p) => s + p.gs, 0)}`, 'gol f · s'],
+          [3 * vnp('V') + vnp('N'), 'punti']].map(([val, lab]) => (
+          <div key={lab} style={{ lineHeight: 1.1 }}><b style={kpiNum}>{val}</b><span style={kpiLab}>{lab}</span></div>
         ))}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          {FILTRI.map(([k, l]) => (
+            <button key={k} onClick={() => setFiltro(k)} style={{ ...chip, ...(filtro === k ? chipAttivo : {}) }}>{l}</button>
+          ))}
+          <span style={{ width: 14 }} />
+          {[['sintesi', 'Sintesi'], ['campo', 'Campo'], ['andamento', 'Andamento']].map(([k, l]) => (
+            <button key={k} onClick={() => setTab(k)} style={{ ...tabStile, ...(tab === k ? tabAttivo : {}) }}>{l}</button>
+          ))}
+        </div>
       </div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
-        {elenco.map(p => (
-          <Link key={p.match_name} href={`/partita/${p.match_name}?tenant=${tenant}`} style={{ ...partita,
+
+      {/* partite su una riga, la piu' recente a sinistra; le piu' vecchie scorrendo di lato */}
+      <StrisciaPartite>
+        {[...elenco].reverse().map(p => (
+          <Link key={p.match_name} href={`/partita/${p.match_name}?tenant=${tenant}`} style={{ ...partita, flex: 'none',
             borderColor: `${ESITO[p.esito]}55`, opacity: nomiScelte.has(p.match_name) ? 1 : 0.35 }}>
             <b style={{ display: 'block', fontFamily: 'var(--font-display)', fontSize: 17, color: ESITO[p.esito] }}>{p.gf}-{p.gs}</b>
             {p.casa ? '' : '@ '}{etichetta(p.avversario)}
             <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: 10.5, marginTop: 1 }}>{data(p.date)}</small>
           </Link>
         ))}
-      </div>
+      </StrisciaPartite>
 
-      {/* tab e filtro delle partite */}
-      <div style={{ display: 'flex', gap: 8, margin: '1.25rem 0', alignItems: 'center', flexWrap: 'wrap' }}>
-        {[['sintesi', 'Sintesi stagione'], ['campo', 'Campo'], ['andamento', 'Andamento']].map(([k, l]) => (
-          <button key={k} onClick={() => setTab(k)} style={{ ...tabStile, ...(tab === k ? tabAttivo : {}) }}>{l}</button>
-        ))}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-          {FILTRI.map(([k, l]) => (
-            <button key={k} onClick={() => setFiltro(k)} style={{ ...chip, ...(filtro === k ? chipAttivo : {}) }}>{l}</button>
-          ))}
-        </div>
-      </div>
-
-      <div style={card}>
+      <div style={{ marginTop: 18 }}>
         {tab === 'sintesi' && (
           <SintesiGruppi nomi={[noi, 'Avversari']} colori={[NOI, LORO]} v={v} perPartita={scelte.length || 1} stagione
             onApri={et => { if (tipi.includes(et)) { setTipo(et); setTab('campo') } }} />
@@ -110,6 +110,23 @@ export default function SquadraVeo({ tenant, categoria, partite, noi }) {
             noi={noi} n={n} tenant={tenant} catParam={catParam} colonne={colConfig[tipo] || []} />
         )}
       </div>
+    </div>
+  )
+}
+
+// riga che scorre di lato; sfumatura e freccia a destra solo se ci sono altre partite da vedere
+function StrisciaPartite({ children }) {
+  const ref = useRef(null)
+  const [altre, setAltre] = useState(false)
+  const controlla = () => { const el = ref.current; if (el) setAltre(el.scrollLeft + el.clientWidth < el.scrollWidth - 2) }
+  useEffect(() => { controlla(); window.addEventListener('resize', controlla); return () => window.removeEventListener('resize', controlla) })
+  return (
+    <div style={{ position: 'relative' }}>
+      <div ref={ref} onScroll={controlla} style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none' }}>{children}</div>
+      {altre && (
+        <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 70, pointerEvents: 'none', display: 'flex', alignItems: 'center',
+          justifyContent: 'flex-end', color: 'var(--text-muted)', fontSize: 22, background: 'linear-gradient(90deg, transparent, var(--bg) 70%)' }}>›</div>
+      )}
     </div>
   )
 }
@@ -209,9 +226,8 @@ function Andamento({ tipi, tipo, setTipo, nomeTipo, partite, noi, n, tenant, cat
 // "2026-11-01T00:00:00" -> "01/nov/26"
 const MESI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
 const data = d => d ? `${d.slice(8, 10)}/${MESI[Number(d.slice(5, 7)) - 1]}/${d.slice(2, 4)}` : ''
-const kpi = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px' }
-const kpiNum = { fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--text)', display: 'block', lineHeight: 1.1 }
-const kpiLab = { fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }
+const kpiNum = { fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--text)', display: 'block', lineHeight: 1.1 }
+const kpiLab = { fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }
 const partita = { background: 'var(--bg-card)', border: '1px solid', borderRadius: 8, padding: '6px 9px', fontSize: 11.5, minWidth: 84,
   textAlign: 'center', color: 'var(--text)', textDecoration: 'none' }
 const tabStile = { padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-muted)',
@@ -219,4 +235,3 @@ const tabStile = { padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid v
 const tabAttivo = { border: '1px solid var(--primary)', background: 'rgba(0,229,255,0.1)', color: 'var(--primary)' }
 const chip = { padding: '4px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#64748B' }
 const chipAttivo = { border: '1px solid var(--primary)', background: 'rgba(0,229,255,0.1)', color: 'var(--primary)' }
-const card = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14, padding: '1.25rem 1.5rem' }

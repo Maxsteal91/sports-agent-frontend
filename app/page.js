@@ -186,7 +186,7 @@ export default function SquadraPage() {
 
   // tenant con partite Veo: sezione a tre tab come la partita (sintesi stagione, campo, andamento)
   if (partite.length && partite.every(p => p.source_format === 'veo') && tenantTeam) return (
-    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
+    <div style={{ padding: '0 2rem 2rem', maxWidth: '1200px', margin: '0 auto' }}>
       <SquadraVeo tenant={tenant} categoria={categoria} partite={partite} noi={tenantTeam} />
     </div>
   )

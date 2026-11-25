@@ -21,7 +21,9 @@ const COLOR_AWAY = '#CC44FF'
 // ─────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────
-function Section({ title, children }) {
+function Section({ title, children, nudo }) {
+  // nudo: senza riquadro e titolo (partite Veo: la riga in alto dice gia' partita e tab)
+  if (nudo) return <div style={{ marginBottom: '1.5rem' }}>{children}</div>
   return (
     <div style={{
       background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -911,9 +913,43 @@ export default function PartitaPage() {
   const goalA  = agg('shot', teamA).extra?.goal  ?? 0
   const goalB  = agg('shot', teamB).extra?.goal  ?? 0
 
-  return (
-    <div style={{ padding: '2rem', maxWidth: '1100px', margin: '0 auto' }}>
+  const MESI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
+  const GIORNI = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab']
+  const dataBreve = partita.date ? (() => { const g = new Date(partita.date)
+    return `${GIORNI[g.getDay()]} ${String(g.getDate()).padStart(2, '0')}/${MESI[g.getMonth()]}/${String(g.getFullYear()).slice(2)}` })() : ''
+  const bottoneTab = t => (
+    <button key={t} onClick={() => setTab(t)} style={{
+      padding: '0.5rem 1rem', borderRadius: '8px',
+      border: `1px solid ${tab === t ? 'var(--primary)' : 'var(--border)'}`,
+      background: tab === t ? 'rgba(0,229,255,0.1)' : 'var(--bg-card)',
+      color: tab === t ? 'var(--primary)' : 'var(--text-muted)',
+      cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '0.9rem',
+      fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', transition: 'all 0.2s'
+    }}>{t}</button>
+  )
 
+  return (
+    <div style={{ padding: isVeo ? '0 2rem 2rem' : '2rem', maxWidth: isVeo ? '1200px' : '1100px', margin: '0 auto' }}>
+
+      {/* Partite Veo: una sola riga, ferma sotto la barra del sito: partita, risultato e tab sempre visibili */}
+      {isVeo && (
+        <div style={{ position: 'sticky', top: 60, zIndex: 20, background: 'var(--bg)', margin: '0 -2rem 1.25rem', padding: '14px 2rem',
+          borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap' }}>
+          <Link href={`/partite?tenant=${tenant}`} style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>← Partite</Link>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 26,
+            letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+            <span style={{ color: COLOR_HOME }}>{teamA}</span><span style={{ color: COLOR_HOME }}>{goalA}</span>
+            <span style={{ color: 'var(--text-muted)' }}>–</span>
+            <span style={{ color: COLOR_AWAY }}>{goalB}</span><span style={{ color: COLOR_AWAY }}>{teamB}</span>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.35 }}>
+            {dataBreve}<br />{[partita.category && partita.category[0].toUpperCase() + partita.category.slice(1), nostraInTrasferta ? 'in trasferta' : 'in casa'].filter(Boolean).join(' · ')}
+          </div>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>{TABS.map(bottoneTab)}</div>
+        </div>
+      )}
+
+      {!isVeo && <>
       <Link href={`/?tenant=${tenant}`} style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '1.5rem' }}>
         ← Dashboard
       </Link>
@@ -954,21 +990,13 @@ export default function PartitaPage() {
 
       {/* Tab navigation */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        {TABS.map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            padding: '0.5rem 1rem', borderRadius: '8px',
-            border: `1px solid ${tab === t ? 'var(--primary)' : 'var(--border)'}`,
-            background: tab === t ? 'rgba(0,229,255,0.1)' : 'var(--bg-card)',
-            color: tab === t ? 'var(--primary)' : 'var(--text-muted)',
-            cursor: 'pointer', fontFamily: 'var(--font-display)', fontSize: '0.9rem',
-            fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', transition: 'all 0.2s'
-          }}>{t}</button>
-        ))}
+        {TABS.map(bottoneTab)}
       </div>
+      </>}
 
       {/* ── TAB: SINTESI (Veo: a gruppi, clic su una riga -> campo) ── */}
       {tab === 'sintesi' && isVeo && (
-        <Section title="Sintesi Partita">
+        <Section title="Sintesi Partita" nudo>
           <SintesiGruppi nomi={[teamA, teamB]} colori={[COLOR_HOME, COLOR_AWAY]}
             v={(lato, et, k) => valore(agg(et, lato === 0 ? teamA : teamB), k)}
             onApri={et => { if (tipiEffettivi.includes(et)) { setMappaEventType(et); setTab('campo') } }} />
@@ -977,7 +1005,7 @@ export default function PartitaPage() {
 
       {/* ── TAB: CAMPO (Veo): menu degli eventi, squadre, fasce, pannello con le colonne di Admin ── */}
       {tab === 'campo' && (
-        <Section title="Campo">
+        <Section title="Campo" nudo>
           <CampoAnalisi eventi={mappaData} tipi={tipiEffettivi} tipo={mappaEventType} onTipo={setMappaEventType}
             nomeTipo={tagLabel} caricamento={mappaLoading} latoNostro={nostraInTrasferta ? 1 : 0}
             giocatori={giocatoriData.filter(p => p.numero).map(p => ({ numero: String(p.numero), nome: p.player, lato: norm(p.team) === norm(teamA) ? 0 : 1,
@@ -1240,7 +1268,7 @@ export default function PartitaPage() {
       )}
 
       {tab === 'giocatori' && isVeo && (
-        <Section title="Giocatori">
+        <Section title="Giocatori" nudo>
           <GiocatoriPartita tenant={tenant} matchName={match_name} colConfig={colConfig} nostra={nostraInTrasferta ? 1 : 0}
             squadre={[{ label: teamA, colore: COLOR_HOME, team: norm(teamA) }, { label: teamB, colore: COLOR_AWAY, team: norm(teamB) }]}
             onApriCampo={(et, g) => {

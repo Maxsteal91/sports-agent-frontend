@@ -39,14 +39,14 @@ The app uses JWT authentication stored in `localStorage`.
 
 La navbar (`app/layout.js`) mostra:
 - Logo "⚽ SPORT ANALYTICS" + dropdown tenant (solo admin con >1 tenant) + dropdown categoria — gruppo sinistro
-- Navlink centrali: Squadra (`/`), Partite (`/partite`), Giocatori, AI Chat, Upload
+- Navlink centrali: Stagione (`/`), Partite (`/partite`), Giocatori, AI Chat, Upload
 - Link Admin + info utente + logout — gruppo destro
 
 ## Routes
 
 **`/login`** — Form email/password. Nessuna navbar.
 
-**`/`** (Squadra) — **Tenant con partite tutte Veo** (`mazzola_pro`): `components/SquadraVeo.js`. In alto risultati (partite, V·N·P, gol fatti·subiti, punti) e la striscia delle partite (risultato colorato, "@" = trasferta, data `01/nov/26`, clic → partita). Filtro **Tutte / Casa / Trasferta / Ultime 5** valido per i tre tab:
+**`/`** (Stagione) — **Tenant con partite tutte Veo** (`mazzola_pro`): `components/SquadraVeo.js`. **Riga ferma in alto** (sotto la barra del sito): squadra, partite, V·N·P, gol fatti·subiti, punti, filtro e tab; sotto la **striscia delle partite** su una riga, la più recente a sinistra, scorre di lato (sfumatura e › solo se ce ne sono altre; risultato colorato, "@" = trasferta, data `01/nov/26`, clic → partita); contenuti senza riquadro. Filtro **Tutte / Casa / Trasferta / Ultime 5** valido per i tre tab:
 - **Sintesi stagione**: `SintesiGruppi` (gruppi Attacco / Possesso / Difesa, noi contro avversari, totale e media a partita, "di cui"; ammonizioni escluse perché mancano per gli avversari); dati `aggregati?tutti=true`; clic su una riga → Campo su quell'evento.
 - **Campo**: `CampoAnalisi` con i punti della stagione (`mappa_stagione`), noi a destra.
 - **Andamento**: l'evento scelto partita per partita; voci = colonne di Admin contate dal backend (`conteggi`); selettore noi / avversari; clic su una colonna = quella voce nel grafico; riga Totale.
@@ -61,7 +61,7 @@ KPI stagione (partite, tiri, goal, nello specchio, % specchio) sempre visibili i
 
 **`/partite`** — Lista partite con data, squadre, risultato (goal calcolati dagli aggregati), categoria. Filtro per data asc/desc. Bottone Dettaglio per ogni partita.
 
-**`/partita/[match_name]`** — **Partite Veo** (`source_format === 'veo'`): tre tab **Sintesi** (`SintesiGruppi`, clic su una riga → Campo), **Campo** (`CampoAnalisi`; per i passaggi la rete dei passaggi di `MappaCampoV2`), **Giocatori**. **Altri formati**: dettaglio partita (tab: sintesi, tiri, mappa campo, passaggi, cross, calci piazzati, duelli). Tab **cross**: divisi per origine (da azione / sviluppo piazzato / seconda palla), righe lanci solo se presenti; tab **calci piazzati**: angoli, punizioni, rimesse lunghe (battuta, esito, tiro). Tab Giocatori: colonne da `column_config` + `tagVisibili`/`tagLabel`, righe con chiave `team-player`. Legge `?tenant=` da `useSearchParams`. `source_format` `balloni` e `veo` = campo intero orizzontale (`isBalloni`), VidSwap = mezzo campo verticale.
+**`/partita/[match_name]`** — **Partite Veo** (`source_format === 'veo'`): **una sola riga ferma in alto** (sotto la barra del sito: ← Partite, squadre e risultato a colori, data `dom 15/nov/26`, categoria, casa/trasferta, tab), contenuti senza riquadro né titolo (`Section nudo`), larghezza 1200 px; tre tab **Sintesi** (`SintesiGruppi`, clic su una riga → Campo), **Campo** (`CampoAnalisi`; per i passaggi la rete dei passaggi di `MappaCampoV2`), **Giocatori**. **Altri formati**: dettaglio partita (tab: sintesi, tiri, mappa campo, passaggi, cross, calci piazzati, duelli). Tab **cross**: divisi per origine (da azione / sviluppo piazzato / seconda palla), righe lanci solo se presenti; tab **calci piazzati**: angoli, punizioni, rimesse lunghe (battuta, esito, tiro). Tab Giocatori: colonne da `column_config` + `tagVisibili`/`tagLabel`, righe con chiave `team-player`. Legge `?tenant=` da `useSearchParams`. `source_format` `balloni` e `veo` = campo intero orizzontale (`isBalloni`), VidSwap = mezzo campo verticale.
 - **Giocatori Veo** (`components/GiocatoriPartita.js`): tabella della partita (colonne di Admin, Tutti / 1° / 2° tempo, ordinamento, massimi in azzurro) e **scheda** del giocatore (fisico, titolare / entrato / uscito, gol, cartellini, sintesi per evento); "Vedi sul campo" apre il tab Campo con quel giocatore scelto (`campoGiocatori` → `giocatoriIniziali`).
 - **Rete dei passaggi (Veo)**: tabella **di lato**, etichette del verso d'attacco dentro il campo; con giocatori scelti i nodi mostrano i passaggi scambiati con loro, frecce ricevute arancioni (`COL_RICEVUTI_RETE`) e la tabella dei compagni. Niente di cliccabile nella tabella o nel grafo.
 - **Giocatori** (`GiocatoriTab`, altri formati): stessa `column_config` della pagina Giocatori (colonne, etichette, ordine), tipi e nomi da `tagVisibili` / `tagLabel`; vista Performance solo per la nostra squadra (riga = squadra + giocatore).
