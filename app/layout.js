@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getUser, clearAuth, isLoggedIn } from '../lib/auth'
 import { TenantProvider, useTenant } from '../lib/TenantContext'
+import { fetchAPI } from '../lib/api'
 
 function NavBar() {
   const router   = useRouter()
@@ -20,10 +21,19 @@ function NavBar() {
 
   const handleLogout = () => { clearAuth(); router.push('/login') }
 
+  // tenant con partite tutte Veo: i giocatori sono un tab della Stagione, niente voce nella barra
+  const [soloVeo, setSoloVeo] = useState(false)
+  useEffect(() => {
+    if (!tenant || pathname === '/login') return
+    fetchAPI(`/upload/v2/partite?tenant=${tenant}`)
+      .then(r => { const ps = r.data || []; setSoloVeo(ps.length > 0 && ps.every(p => p.source_format === 'veo')) })
+      .catch(() => setSoloVeo(false))
+  }, [tenant])
+
   const navLinks = [
     { href: '/',          label: 'Stagione' },
     { href: '/partite',   label: 'Partite' },
-    { href: '/giocatori', label: 'Giocatori' },
+    ...(soloVeo ? [] : [{ href: '/giocatori', label: 'Giocatori' }]),
     { href: '/chat',      label: 'AI Chat' },
     { href: '/upload',    label: 'Upload' },
   ]

@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useParams, useSearchParams } from 'next/navigation'
+import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { fetchAPI } from '../../../lib/api'
 import { getUser } from '../../../lib/auth'
@@ -10,6 +10,7 @@ import SintesiGruppi from '../../../components/SintesiGruppi'
 import CampoAnalisi from '../../../components/CampoAnalisi'
 import GiocatoriPartita from '../../../components/GiocatoriPartita'
 import { valore } from '../../../lib/sintesi'
+import { scriviVista, conVista } from '../../../lib/vista'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
@@ -121,7 +122,7 @@ const versoAttacco = { position: 'absolute', top: 4, fontFamily: 'var(--font-dis
   textTransform: 'uppercase', padding: '2px 8px', borderRadius: 5, background: 'rgba(10,15,28,0.75)' }
 
 function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, matchName, giocatoriScelti = [],
-                       latoEsterno, fasciaEsterna }) {
+                       latoEsterno, fasciaEsterna, onLatoEsterno }) {
   const [filtroTeamInterno, setFiltroTeam] = useState('tutti')
   const [rete, setRete] = useState(null)
   const [fasciaInterna, setFascia] = useState(null)
@@ -662,9 +663,17 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, mat
                 {reteSvg}
               </svg>
               {sourceFormat === 'veo' && <>
-                {/* Veo: campo girato, la nostra squadra attacca sempre verso destra */}
-                <div style={{ ...versoAttacco, left: 8, color: nostraInTrasferta ? COLOR_HOME : COLOR_AWAY }}>← {nostraInTrasferta ? teamA : teamB} attacca</div>
-                <div style={{ ...versoAttacco, right: 8, color: nostraInTrasferta ? COLOR_AWAY : COLOR_HOME }}>{nostraInTrasferta ? teamB : teamA} attacca →</div>
+                {/* Veo: campo girato, la nostra squadra attacca sempre verso destra; clic sull'etichetta = la rete di quella squadra */}
+                {[['left', nostraInTrasferta ? 0 : 1], ['right', nostraInTrasferta ? 1 : 0]].map(([parte, l]) => {
+                  const nome = l === 0 ? teamA : teamB, col = l === 0 ? COLOR_HOME : COLOR_AWAY, acceso = !onLatoEsterno || latoRete === l
+                  return (
+                    <div key={parte} onClick={() => onLatoEsterno?.(l)} title={onLatoEsterno && !acceso ? `La rete di ${nome}` : ''}
+                      style={{ ...versoAttacco, [parte]: 8, color: acceso ? col : '#64748B', ...(onLatoEsterno ? { cursor: 'pointer', padding: '4px 10px', top: 6,
+                        border: `1.5px solid ${acceso ? col : 'rgba(255,255,255,0.18)'}`, userSelect: 'none' } : {}) }}>
+                      {parte === 'left' ? `← ${nome} attacca` : `${nome} attacca →`}
+                    </div>
+                  )
+                })}
               </>}
             </div>
             <div style={{ fontSize: 11, color: '#64748B', marginTop: 8, lineHeight: 1.45 }}>
@@ -880,6 +889,18 @@ function MappaTiriV2({ data, teamA, teamB }) {
 // ─────────────────────────────────────────
 // PAGINA
 // ─────────────────────────────────────────
+// freccia ‹ › verso la partita prima / dopo, con la stessa vista (nuova pagina: tutto si ricarica da capo)
+function FrecciaPartita({ verso, partita }) {
+  const attiva = !!partita
+  const nome = partita ? `${partita.home_team} – ${partita.away_team}` : ''
+  return (
+    <span title={attiva ? `${nome} (stessa vista)` : ''} onClick={() => attiva && window.location.assign(conVista(`/partita/${partita.match_name}`))}
+      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 8, fontSize: 18,
+        border: `1px solid ${attiva ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.06)'}`, color: attiva ? 'var(--text)' : '#334155',
+        cursor: attiva ? 'pointer' : 'default', userSelect: 'none' }}>{verso}</span>
+  )
+}
+
 export default function PartitaPage() {
   const { match_name }  = useParams()
   const searchParams    = useSearchParams()
@@ -896,7 +917,12 @@ export default function PartitaPage() {
   const [aggregati,        setAggregati]        = useState([])
   const [hasGiocatori,     setHasGiocatori]     = useState(false)
   const [loading,          setLoading]          = useState(true)
-  const [tab,              setTab]              = useState('sintesi')
+  // vista arrivata dalla Stagione o da un'altra partita (lib/vista.js): tab, evento, giocatori scelti, scheda
+  const [iniziale] = useState(() => ({ tab: searchParams.get('tab'), ev: searchParams.get('ev'), gg: searchParams.get('gg'), s: searchParams.get('s') }))
+  const router = useRouter()
+  // confronto della stagione (giocatori scelti, nessuna scheda) -> nella partita il confronto e' nel Campo
+  const tabIniziale = iniziale.tab === 'giocatori' && iniziale.gg && !iniziale.s ? 'campo' : iniziale.tab
+  const [tab,              setTab]              = useState(['campo', 'giocatori'].includes(tabIniziale) ? tabIniziale : 'sintesi')
   const [tipiCoordinate,   setTipiCoordinate]   = useState([])
   const [mappaEventType,   setMappaEventType]   = useState(null)
   const [mappaData,        setMappaData]        = useState([])
@@ -905,6 +931,7 @@ export default function PartitaPage() {
   const [giocatoriLoaded,  setGiocatoriLoaded]  = useState(false)
   const [colConfig,        setColConfig]        = useState({})
   const [campoGiocatori,   setCampoGiocatori]   = useState([])   // giocatori scelti aprendo il campo dalla scheda
+  const [elencoPartite,    setElencoPartite]    = useState([])   // per ‹ › (partita prima / dopo)
 
   // colonne di Admin -> Eventi e statistiche: il pannello del campo usa le stesse
   useEffect(() => {
@@ -923,7 +950,7 @@ export default function PartitaPage() {
       setHasGiocatori(report.has_giocatori || false)
       const ts = tipi.tipi || []
       setTipiCoordinate(ts)
-      if (ts.length > 0) setMappaEventType(ts.includes('shot') ? 'shot' : ts[0])
+      if (ts.length > 0) setMappaEventType(ts.includes(iniziale.ev) ? iniziale.ev : ts.includes('shot') ? 'shot' : ts[0])
       // Se /tipi non disponibile, mappaEventType verrà impostato sotto da tipiEffettivi
       setLoading(false)
     }).catch(err => { console.error(err); setLoading(false) })
@@ -953,6 +980,24 @@ export default function PartitaPage() {
       .then(res => { setGiocatoriData(res.data || []); setGiocatoriLoaded(true) })
       .catch(() => setGiocatoriLoaded(true))
   }, [tab, match_name, tenant, userReady, giocatoriLoaded])
+
+  // giocatori scelti arrivati con la vista (per nome): i loro numeri in questa partita
+  useEffect(() => {
+    if (!giocatoriLoaded || !iniziale.gg || !partita) return
+    const casa = (partita.home_team || '').toLowerCase().trim()
+    const scelti = iniziale.gg.split(',').map(k => giocatoriData.find(p => p.nome_norm === k && p.numero)).filter(Boolean)
+      .map(p => ({ numero: String(p.numero), nome: p.player, lato: (p.team || '').toLowerCase().trim() === casa ? 0 : 1, chiave: p.nome_norm }))
+    if (scelti.length) setCampoGiocatori(scelti)
+  }, [giocatoriLoaded])
+
+  // la vista nell'indirizzo: tab ed evento (il resto lo scrivono campo e giocatori)
+  useEffect(() => { if (partita) scriviVista({ tab, ...(mappaEventType ? { ev: mappaEventType } : {}) }) }, [tab, mappaEventType, partita])
+
+  // partite del tenant in ordine di data, per ‹ › (rispettando il filtro casa / trasferta / ultime 5 della Stagione)
+  useEffect(() => {
+    if (!tenant || !userReady) return
+    fetchAPI(`/upload/v2/partite?tenant=${tenant}`).then(r => setElencoPartite(r.data || [])).catch(() => {})
+  }, [tenant, userReady])
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
@@ -1014,6 +1059,18 @@ export default function PartitaPage() {
   const GIORNI = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab']
   const dataBreve = partita.date ? (() => { const g = new Date(partita.date)
     return `${GIORNI[g.getDay()]} ${String(g.getDate()).padStart(2, '0')}/${MESI[g.getMonth()]}/${String(g.getFullYear()).slice(2)}` })() : ''
+  // ‹ › : partita prima / dopo in ordine di data, con lo stesso filtro della Stagione (casa / trasferta / ultime 5)
+  const vicine = (() => {
+    const noi = norm(tenant).split('_')[0]
+    const tutte = [...elencoPartite].filter(p => p.source_format === 'veo').sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+    const filtro = searchParams.get('p')
+    let lista = tutte.filter(p => filtro === 'casa' ? norm(p.home_team).includes(noi) : filtro === 'trasferta' ? norm(p.away_team).includes(noi) : true)
+    if (filtro === 'ultime5') lista = lista.slice(-5)
+    if (!lista.some(p => p.match_name === match_name)) lista = tutte
+    const i = lista.findIndex(p => p.match_name === match_name)
+    return { prima: i > 0 ? lista[i - 1] : null, dopo: i >= 0 && i < lista.length - 1 ? lista[i + 1] : null }
+  })()
+
   const bottoneTab = t => (
     <button key={t} onClick={() => setTab(t)} style={{
       padding: '0.5rem 1rem', borderRadius: '8px',
@@ -1032,12 +1089,18 @@ export default function PartitaPage() {
       {isVeo && (
         <div style={{ position: 'sticky', top: 60, zIndex: 20, background: 'var(--bg)', margin: '0 -2rem 1.25rem', padding: '14px 2rem',
           borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap' }}>
-          <Link href={`/partite?tenant=${tenant}`} style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>← Partite</Link>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 26,
-            letterSpacing: '0.03em', textTransform: 'uppercase' }}>
-            <span style={{ color: COLOR_HOME }}>{teamA}</span><span style={{ color: COLOR_HOME }}>{goalA}</span>
-            <span style={{ color: 'var(--text-muted)' }}>–</span>
-            <span style={{ color: COLOR_AWAY }}>{goalB}</span><span style={{ color: COLOR_AWAY }}>{teamB}</span>
+          {/* i giocatori scelti nel Campo non tornano alla stagione (li' non si vedrebbero): restano solo tra partite con ‹ › */}
+          <Link href={`/?tenant=${tenant}`} title="La stagione, con la stessa vista" style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}
+            onClick={e => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); router.push(conVista('/', { tenant, gg: null })) }}>← Stagione</Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <FrecciaPartita verso="‹" partita={vicine.prima} />
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 26,
+              letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+              <span style={{ color: COLOR_HOME }}>{teamA}</span><span style={{ color: COLOR_HOME }}>{goalA}</span>
+              <span style={{ color: 'var(--text-muted)' }}>–</span>
+              <span style={{ color: COLOR_AWAY }}>{goalB}</span><span style={{ color: COLOR_AWAY }}>{teamB}</span>
+            </div>
+            <FrecciaPartita verso="›" partita={vicine.dopo} />
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.35 }}>
             {dataBreve}<br />{[partita.category && partita.category[0].toUpperCase() + partita.category.slice(1), nostraInTrasferta ? 'in trasferta' : 'in casa'].filter(Boolean).join(' · ')}
@@ -1105,7 +1168,7 @@ export default function PartitaPage() {
         <Section title="Campo" nudo>
           <CampoAnalisi eventi={mappaData} tipi={tipiEffettivi} tipo={mappaEventType} onTipo={setMappaEventType}
             nomeTipo={tagLabel} caricamento={mappaLoading} latoNostro={nostraInTrasferta ? 1 : 0}
-            giocatori={giocatoriData.filter(p => p.numero).map(p => ({ numero: String(p.numero), nome: p.player, lato: norm(p.team) === norm(teamA) ? 0 : 1,
+            giocatori={giocatoriData.filter(p => p.numero).map(p => ({ numero: String(p.numero), nome: p.player, lato: norm(p.team) === norm(teamA) ? 0 : 1, chiave: p.nome_norm,
               totali: Object.fromEntries(Object.entries(p.events || {}).map(([et, v]) => [et, v.totale || 0])) }))
               .sort((a, b) => a.lato - b.lato || Number(a.numero) - Number(b.numero))}
             giocatoriIniziali={campoGiocatori}
@@ -1116,9 +1179,9 @@ export default function PartitaPage() {
               ? { sinistra: { label: teamA, colore: COLOR_HOME }, destra: { label: teamB, colore: COLOR_AWAY } }
               : { sinistra: { label: teamB, colore: COLOR_AWAY }, destra: { label: teamA, colore: COLOR_HOME } }}
             sostituto={mappaEventType === 'passaggi'
-              ? ({ scelti, lato, fascia }) => <MappaCampoV2 data={mappaData} eventType="passaggi" teamA={teamA} teamB={teamB}
+              ? ({ scelti, lato, fascia, cambiaLato }) => <MappaCampoV2 data={mappaData} eventType="passaggi" teamA={teamA} teamB={teamB}
                   sourceFormat={partita?.source_format} tenant={tenant} matchName={match_name} giocatoriScelti={scelti}
-                  latoEsterno={lato} fasciaEsterna={fascia} />
+                  latoEsterno={lato} fasciaEsterna={fascia} onLatoEsterno={cambiaLato} />
               : null} />
         </Section>
       )}
@@ -1367,12 +1430,9 @@ export default function PartitaPage() {
       {tab === 'giocatori' && isVeo && (
         <Section title="Giocatori" nudo>
           <GiocatoriPartita tenant={tenant} matchName={match_name} colConfig={colConfig} nostra={nostraInTrasferta ? 1 : 0}
+            schedaIniziale={iniziale.s} onScheda={k => scriviVista({ s: k })}
             squadre={[{ label: teamA, colore: COLOR_HOME, team: norm(teamA) }, { label: teamB, colore: COLOR_AWAY, team: norm(teamB) }]}
-            onApriCampo={(et, g) => {
-              if (et && tipiEffettivi.includes(et)) setMappaEventType(et)
-              setCampoGiocatori(g?.numero ? [{ numero: String(g.numero), nome: g.nome, lato: g.lato }] : [])
-              setTab('campo')
-            }} />
+            onConfronta={gg => { setCampoGiocatori(gg); scriviVista({ s: null, st: null }); setTab('campo') }} />
         </Section>
       )}
 

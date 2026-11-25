@@ -1,12 +1,12 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { fetchAPI } from '../../lib/api'
 import { squadraDelTenant } from '../../lib/squadra'
 import { getUser } from '../../lib/auth'
 import { useTenant } from '../../lib/TenantContext'
 import * as XLSX from 'xlsx'
 import PlayerModal from '../../components/PlayerModal'
-import GiocatoriStagione from '../../components/GiocatoriStagione'
 
 const COLOR_HOME = '#00E5FF'
 
@@ -35,6 +35,10 @@ export default function GiocatoriPage() {
   const [colConfig,         setColConfig]         = useState({})
   const [ruoloFiltro,       setRuoloFiltro]       = useState(null)
   const [selectedPlayer,    setSelectedPlayer]    = useState(null)
+  const router = useRouter()
+  // tenant con partite Veo: i giocatori sono un tab della Stagione
+  const soloVeo = partite.length > 0 && partite.every(p => p.source_format === 'veo')
+  useEffect(() => { if (soloVeo) router.replace(`/?tenant=${tenant}&tab=giocatori`) }, [soloVeo, tenant])
 
   useEffect(() => {
     setUser(getUser())
@@ -216,13 +220,7 @@ export default function GiocatoriPage() {
     return [full[0], full[1]]
   }
 
-  // tenant con partite Veo: tabella della stagione, scheda del giocatore e confronto
-  if (partite.length && partite.every(p => p.source_format === 'veo') && homeTeam) return (
-    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
-      <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '2.2rem', fontWeight: 700, letterSpacing: '0.05em', color: 'var(--primary)', marginBottom: 14 }}>GIOCATORI</h1>
-      <GiocatoriStagione tenant={tenant} categoria={categoria} partite={partite} noi={homeTeam} />
-    </div>
-  )
+  if (soloVeo) return null   // si va alla Stagione, tab Giocatori
 
   return (
     <>

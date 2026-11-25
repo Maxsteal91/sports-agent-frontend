@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { titoloPunto } from '../lib/tempo'
 import { GRUPPI_EVENTI, etichetta } from '../lib/sintesi'
+import { daIndirizzo, scriviVista } from '../lib/vista'
 
 // Campo con pannello, comune a partita e stagione (dati Veo: la nostra squadra attacca sempre a destra).
 //   eventi   punti {team, x, y, x2, y2, attrs, minute, period, match_name, player, ...} (coordinate 0-100)
@@ -10,7 +11,7 @@ import { GRUPPI_EVENTI, etichetta } from '../lib/sintesi'
 //   colonne  colonne di Admin -> Eventi e statistiche per il tipo scelto ({label, visibile, filtro})
 //   direzione {sinistra, destra}: chi attacca da che parte; filtriExtra: controlli in piu' (es. partite)
 //   sostituto: nodo da mostrare al posto del campo (es. la rete dei passaggi), oppure funzione
-//   ({scelti, lato, fascia}) => nodo: giocatori scelti, squadra e fascia di 15' (1-6, null = tutta) della barra comune
+//   ({scelti, lato, fascia, cambiaLato}) => nodo: giocatori scelti, squadra e fascia di 15' (1-6, null = tutta) della barra comune
 // Il pannello raggruppa le colonne per attributo (blocchi che sommano al totale); un clic filtra i punti.
 const FASCE = [['Tutta', null], ['1° tempo', ['Primo_Tempo', 0, 999]], ['2° tempo', ['Secondo_Tempo', 0, 999]],
   ["0-15'", ['Primo_Tempo', 0, 15]], ["15-30'", ['Primo_Tempo', 15, 30]], ["30-45'+", ['Primo_Tempo', 30, 999]],
@@ -42,14 +43,19 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
     colore: latiSquadre[g.lato].colore, tinta: scelti.length === 1 ? latiSquadre[g.lato].colore : COLORI_GIOCATORI[i],
     appartiene: d => String(d.player) === String(g.numero) && latiSquadre[g.lato].appartiene(d),
   })) : latiSquadre
-  const [lato, setLato] = useState(null)          // null = entrambi (tutti i giocatori scelti)
+  // vista ripresa dall'indirizzo (lib/vista.js): punti / heatmap, zone, fascia di tempo
+  const heatIniziale = daIndirizzo('v') === 'heatmap'
+  const [lato, setLato] = useState(heatIniziale ? ((giocatoriIniziali || []).length ? 0 : latoNostro) : null)   // null = entrambi
   const [latoRete, setLatoRete] = useState(null)  // sostituto (rete dei passaggi): squadra scelta
   const latoReteEff = scelti.length ? scelti[0].lato : (latoRete ?? latoNostro)
   const [scelta, setScelta] = useState(null)      // {nome, valori, label}
   const [soloPericolose, setSoloPericolose] = useState(false)
-  const [fascia, setFascia] = useState(0)
-  const [vista, setVista] = useState('punti')     // punti | heatmap
-  const [griglia, setGriglia] = useState(0)       // indice in GRIGLIE (heatmap)
+  const [fascia, setFascia] = useState(() => Number(daIndirizzo('f')) || 0)
+  const [vista, setVista] = useState(heatIniziale ? 'heatmap' : 'punti')
+  const [griglia, setGriglia] = useState(daIndirizzo('z') === '18' ? 1 : 0)       // indice in GRIGLIE (heatmap)
+  useEffect(() => { scriviVista({ v: vista === 'heatmap' ? 'heatmap' : null, z: griglia ? '18' : null, f: fascia || null }) }, [vista, griglia, fascia])
+  // giocatori scelti nella partita: per nome (chiave = nome_norm), cosi' si ritrovano nelle altre partite
+  useEffect(() => { if (giocatori) scriviVista({ gg: scelti.map(g => g.chiave).filter(Boolean).join(',') || null }) }, [JSON.stringify(scelti.map(g => g.chiave))])
   // heatmap: una squadra alla volta (due squadre nello stesso tassello non si leggono): la nostra
   const cambiaVista = k => { setVista(k); if (k === 'heatmap' && lato == null) setLato(scelti.length ? 0 : latoNostro) }
   const aggiungi = v => {
@@ -105,9 +111,44 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
   const altri = tipi.filter(et => !GRUPPI_EVENTI.some(([, ets]) => ets.includes(et)))
   if (altri.length) gruppi.push(['Altro', altri])
 
+  // sotto il campo: come lo guardo (punti / heatmap, zone della heatmap)
+  const comandiVista = !sostituto && (
+    <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
+      <div style={segmento}>
+        {[['punti', 'Punti'], ['heatmap', 'Heatmap']].map(([k, l]) => (
+          <div key={k} onClick={() => cambiaVista(k)} style={{ ...voceSeg, ...(vista === k ? segAttivo : {}) }}>{l}</div>
+        ))}
+      </div>
+      {vista === 'heatmap' && (
+        <div style={segmento}>
+          {GRIGLIE.map(([, , l], i) => (
+            <div key={l} onClick={() => setGriglia(i)} style={{ ...voceSeg, ...(griglia === i ? segAttivo : {}) }}>{l}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+  // etichette d'attacco nel campo = filtro delle squadre (clic: solo quella squadra, di nuovo: tutte e due;
+  // con la heatmap una squadra alla volta). Con giocatori scelti restano solo etichette
+  const etichettaAttacco = parte => {
+    const d = direzione[parte], destra = parte === 'destra'
+    const i = !scelti.length && !affiancati && latiSquadre.length > 1 ? latiSquadre.findIndex(l => l.label === d.label) : -1
+    const testo = destra ? `${d.label} attacca →` : `← ${d.label} attacca`
+    if (i < 0) return <div style={{ ...freccia, [destra ? 'right' : 'left']: 12, color: d.colore }}>{testo}</div>
+    const acceso = lato == null || lato === i
+    return (
+      <div onClick={() => setLato(vista === 'heatmap' ? i : lato === i ? null : i)} title={acceso && lato === i ? 'Mostra tutte e due' : `Solo ${d.label}`}
+        style={{ ...freccia, [destra ? 'right' : 'left']: 10, top: 6, cursor: 'pointer', padding: '4px 10px', borderRadius: 6, userSelect: 'none',
+          border: `1.5px solid ${acceso ? d.colore : 'rgba(255,255,255,0.18)'}`, color: acceso ? d.colore : '#64748B',
+          background: 'rgba(10,15,28,0.9)' }}>
+        {testo} <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 600, fontSize: 11, marginLeft: 4 }}>{base.filter(x => latoDi(x) === i).length}</span>
+      </div>
+    )
+  }
+
   return (
     <div>
-      {/* barra: evento, squadre, filtri in piu' */}
+      {/* barra: evento e tempo ("cosa guardo"); squadre nelle etichette d'attacco, punti / heatmap sotto il campo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
         {/* con giocatori scelti si cambia evento dalla striscia di riepilogo: il menu non serve */}
         {!scelti.length && !affiancati && <div ref={menuRef} style={{ position: 'relative' }}>
@@ -128,41 +169,12 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
             </div>
           )}
         </div>}
-        {sostituto && !scelti.length && (
-          <div style={segmento}>
-            {latiSquadre.map((l, i) => (
-              <div key={l.label} onClick={() => { setLatoRete(i); setScelti(scelti.filter(g => g.lato === i)) }}
-                style={{ ...voceSeg, ...(latoReteEff === i ? segAttivo : {}) }}>
-                <span style={{ width: 9, height: 9, borderRadius: '50%', background: l.colore, display: 'inline-block' }} />{l.label}
-              </div>
-            ))}
-          </div>
-        )}
-        {!sostituto && scelti.length < 2 && !affiancati && lati.length > 1 && (
-          <div style={segmento}>
-            {(vista === 'heatmap' ? lati.map((_, i) => i) : [null, ...lati.map((_, i) => i)]).map(i => (
-              <div key={String(i)} onClick={() => setLato(i)} style={{ ...voceSeg, ...(lato === i ? segAttivo : {}) }}>
-                {i != null && <span style={{ width: 9, height: 9, borderRadius: '50%', background: lati[i].colore, display: 'inline-block' }} />}
-                {i == null ? (scelti.length ? 'Tutti' : 'Entrambe') : lati[i].label}
-                <small style={{ color: 'var(--text-muted)' }}>{i == null ? base.length : base.filter(d => latoDi(d) === i).length}</small>
-              </div>
-            ))}
-          </div>
-        )}
-        {!sostituto && (
-          <div style={segmento}>
-            {[['punti', 'Punti'], ['heatmap', 'Heatmap']].map(([k, l]) => (
-              <div key={k} onClick={() => cambiaVista(k)} style={{ ...voceSeg, ...(vista === k ? segAttivo : {}) }}>{l}</div>
-            ))}
-          </div>
-        )}
-        {!sostituto && vista === 'heatmap' && (
-          <div style={segmento}>
-            {GRIGLIE.map(([, , l], i) => (
-              <div key={l} onClick={() => setGriglia(i)} style={{ ...voceSeg, ...(griglia === i ? segAttivo : {}) }}>{l}</div>
-            ))}
-          </div>
-        )}
+        {/* tempo accanto all'evento: sopra il campo "cosa guardo"; sotto il campo "come lo guardo" (punti / heatmap) */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {FASCE.map(([l], i) => (sostituto && FASCIA_RETE[i] === undefined) ? null : (
+            <button key={l} onClick={() => setFascia(i)} style={{ ...chip, ...(fascia === i ? chipAttivo : {}) }}>{l}</button>
+          ))}
+        </div>
         {filtriExtra}
       </div>
       {giocatori?.length > 0 && (
@@ -202,15 +214,9 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
           </div>
         )
       })()}
-      {(
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-          {FASCE.map(([l], i) => (sostituto && FASCIA_RETE[i] === undefined) ? null : (
-            <button key={l} onClick={() => setFascia(i)} style={{ ...chip, ...(fascia === i ? chipAttivo : {}) }}>{l}</button>
-          ))}
-        </div>
-      )}
 
-      {(typeof sostituto === 'function' ? sostituto({ scelti, lato: latoReteEff, fascia: FASCIA_RETE[fascia] ?? null }) : sostituto) || (scelti.length >= 2 || affiancati ? (
+      {(typeof sostituto === 'function' ? sostituto({ scelti, lato: latoReteEff, fascia: FASCIA_RETE[fascia] ?? null,
+          cambiaLato: scelti.length ? null : i => { setLatoRete(i); setScelti(scelti.filter(g => g.lato === i)) } }) : sostituto) || (scelti.length >= 2 || affiancati ? (
         // confronto: un campo per giocatore (stesso evento, stessa scala) e sotto la tabella delle voci di Admin
         <div>
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${lati.length}, 1fr)`, gap: 16 }}>
@@ -236,6 +242,7 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
               )
             })}
           </div>
+          {comandiVista}
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5, marginTop: 14 }}>
             <thead>
               <tr>
@@ -287,12 +294,10 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
                   ? <Heatmap punti={visibili} colore={lati[lato ?? latoNostro].colore} colonne={GRIGLIE[griglia][0]} righe={GRIGLIE[griglia][1]} />
                   : inOrdine(visibili, tipo).map((d, i) => <Punto key={i} d={d} colore={lati[latoDi(d)]?.colore || '#888'} tipo={tipo} />)}
               </svg>
-              {direzione && <>
-                <div style={{ ...freccia, left: 12, color: direzione.sinistra.colore }}>← {direzione.sinistra.label} attacca</div>
-                <div style={{ ...freccia, right: 12, color: direzione.destra.colore }}>{direzione.destra.label} attacca →</div>
-              </>}
+              {direzione && <>{etichettaAttacco('sinistra')}{etichettaAttacco('destra')}</>}
               {caricamento && <div style={velo}>Caricamento...</div>}
             </div>
+            {comandiVista}
             <div style={{ display: 'flex', gap: 16, justifyContent: 'center', fontSize: 11, color: 'var(--text-muted)', marginTop: 8, flexWrap: 'wrap' }}>
               {tipo === 'shot' && <span>★ gol</span>}
               {conPericolo && <>

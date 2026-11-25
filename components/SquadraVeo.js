@@ -1,29 +1,35 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { daIndirizzo, scriviVista, conVista } from '../lib/vista'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { fetchAPI } from '../lib/api'
 import { useTenant } from '../lib/TenantContext'
 import SintesiGruppi from './SintesiGruppi'
 import CampoAnalisi from './CampoAnalisi'
+import GiocatoriStagione from './GiocatoriStagione'
 import { valore, sommaRighe, etichetta } from '../lib/sintesi'
 
-// Sezione Stagione per i tenant con partite Veo: riga ferma in alto (numeri, filtro, tab), partite, poi tre tab come la partita
+// Sezione Stagione per i tenant con partite Veo: riga ferma in alto (numeri, filtro, tab), partite, poi i tab
+//   Giocatori         la tabella della stagione, scheda e confronto (GiocatoriStagione), con il filtro comune
 //   Sintesi stagione  la sintesi a gruppi, noi contro avversari, totale e media a partita
 //   Campo             lo stesso campo della partita, con i punti della stagione
 //   Andamento         l'evento scelto partita per partita
-// Un solo filtro delle partite (tutte / casa / trasferta / ultime 5) vale per tutti e tre.
+// Un solo filtro delle partite (tutte / casa / trasferta / ultime 5) vale per tutti i tab.
 const NOI = '#00E5FF', LORO = '#CC44FF'
 const FILTRI = [['tutte', 'Tutte'], ['casa', 'Casa'], ['trasferta', 'Trasferta'], ['ultime5', 'Ultime 5']]
 const ESITO = { V: '#22C55E', N: '#94A3B8', P: '#EF4444' }
 
 export default function SquadraVeo({ tenant, categoria, partite, noi }) {
   const { tagVisibili, tagLabel } = useTenant()
-  const [tab, setTab] = useState('sintesi')
+  // tab, filtro ed evento ripresi dall'indirizzo (lib/vista.js) e scritti a ogni cambio
+  const [tab, setTab] = useState(() => ['sintesi', 'campo', 'andamento', 'giocatori'].includes(daIndirizzo('tab')) ? daIndirizzo('tab') : 'sintesi')
   const [righe, setRighe] = useState([])
   const [colConfig, setColConfig] = useState({})
-  const [filtro, setFiltro] = useState('tutte')
-  const [tipo, setTipo] = useState('shot')
+  const [filtro, setFiltro] = useState(() => ['casa', 'trasferta', 'ultime5'].includes(daIndirizzo('p')) ? daIndirizzo('p') : 'tutte')
+  const [tipo, setTipo] = useState(() => daIndirizzo('ev') || 'shot')
+  useEffect(() => { scriviVista({ tab, p: filtro === 'tutte' ? null : filtro, ev: tipo }) }, [tab, filtro, tipo])
   const [punti, setPunti] = useState([])
   const [carica, setCarica] = useState(false)
   const n = (noi || '').toLowerCase()
@@ -56,6 +62,8 @@ export default function SquadraVeo({ tenant, categoria, partite, noi }) {
     && (r.team === n) === (lato === 0))), k)
   const tipi = tagVisibili([...new Set(righe.filter(r => r.totale > 0).map(r => r.event_type))]).filter(et => et !== 'passaggi')
   const vnp = k => scelte.filter(p => p.esito === k).length
+  // evento arrivato da una partita ma che qui non c'e' (es. passaggi = rete): il primo disponibile
+  useEffect(() => { if (tipi.length && !tipi.includes(tipo)) setTipo(tipi.includes('shot') ? 'shot' : tipi[0]) }, [tipi.join(',')])
 
   return (
     <div>
@@ -71,27 +79,35 @@ export default function SquadraVeo({ tenant, categoria, partite, noi }) {
           <div key={lab} style={{ lineHeight: 1.1 }}><b style={kpiNum}>{val}</b><span style={kpiLab}>{lab}</span></div>
         ))}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          {FILTRI.map(([k, l]) => (
-            <button key={k} onClick={() => setFiltro(k)} style={{ ...chip, ...(filtro === k ? chipAttivo : {}) }}>{l}</button>
-          ))}
-          <span style={{ width: 14 }} />
-          {[['sintesi', 'Sintesi'], ['campo', 'Campo'], ['andamento', 'Andamento']].map(([k, l]) => (
-            <button key={k} onClick={() => setTab(k)} style={{ ...tabStile, ...(tab === k ? tabAttivo : {}) }}>{l}</button>
+          {[['sintesi', 'Sintesi'], ['campo', 'Campo'], ['andamento', 'Andamento'], ['giocatori', 'Giocatori']].map(([k, l]) => (
+            <button key={k} onClick={() => { setTab(k); if (k !== tab) scriviVista({ s: null, st: null, gg: null }) }}
+              style={{ ...tabStile, ...(tab === k ? tabAttivo : {}) }}>{l}</button>
           ))}
         </div>
       </div>
 
       {/* partite su una riga, la piu' recente a sinistra; le piu' vecchie scorrendo di lato */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {/* quali partite guardo: accanto alla striscia, cosi' si vede subito quali restano accese */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, flex: 'none', paddingRight: 12, borderRight: '1px solid var(--border)' }}>
+          <div style={{ gridColumn: '1 / span 2', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Partite</div>
+          {FILTRI.map(([k, l]) => (
+            <button key={k} onClick={() => setFiltro(k)} style={{ ...chip, padding: '3px 9px', fontSize: 11.5, ...(filtro === k ? chipAttivo : {}) }}>{l}</button>
+          ))}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
       <StrisciaPartite>
         {[...elenco].reverse().map(p => (
-          <Link key={p.match_name} href={`/partita/${p.match_name}?tenant=${tenant}`} style={{ ...partita, flex: 'none',
+          <LinkPartita key={p.match_name} tenant={tenant} match={p.match_name} style={{ ...partita, flex: 'none',
             borderColor: `${ESITO[p.esito]}55`, opacity: nomiScelte.has(p.match_name) ? 1 : 0.35 }}>
             <b style={{ display: 'block', fontFamily: 'var(--font-display)', fontSize: 17, color: ESITO[p.esito] }}>{p.gf}-{p.gs}</b>
             {p.casa ? '' : '@ '}{etichetta(p.avversario)}
             <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: 10.5, marginTop: 1 }}>{data(p.date)}</small>
-          </Link>
+          </LinkPartita>
         ))}
       </StrisciaPartite>
+        </div>
+      </div>
 
       <div style={{ marginTop: 18 }}>
         {tab === 'sintesi' && (
@@ -105,12 +121,26 @@ export default function SquadraVeo({ tenant, categoria, partite, noi }) {
                    { label: 'Avversari', colore: LORO, appartiene: d => (d.team || '').toLowerCase() !== n }]}
             direzione={{ sinistra: { label: 'Avversari', colore: LORO }, destra: { label: noi, colore: NOI } }} />
         )}
+        {tab === 'giocatori' && (
+          <GiocatoriStagione tenant={tenant} categoria={categoria} partite={partite} noi={noi} scelteEsterne={scelte} />
+        )}
         {tab === 'andamento' && (
           <Andamento tipi={tipi} tipo={tipo} setTipo={setTipo} nomeTipo={tagLabel} partite={scelte}
             noi={noi} n={n} tenant={tenant} catParam={catParam} colonne={colConfig[tipo] || []} />
         )}
       </div>
     </div>
+  )
+}
+
+// link a una partita che porta con se' la vista attuale (tab, evento, punti/heatmap, tempo, giocatori)
+function LinkPartita({ tenant, match, style, children }) {
+  const router = useRouter()
+  return (
+    <Link href={`/partita/${match}?tenant=${tenant}`} title="Apri con la vista attuale" style={style}
+      onClick={e => { if (e.metaKey || e.ctrlKey) return; e.preventDefault(); router.push(conVista(`/partita/${match}`, { tenant })) }}>
+      {children}
+    </Link>
   )
 }
 
@@ -203,7 +233,7 @@ function Andamento({ tipi, tipo, setTipo, nomeTipo, partite, noi, n, tenant, cat
               <tr key={p.match_name} style={{ borderTop: '1px solid var(--border)', textAlign: 'right' }}>
                 <td style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)' }}>{data(p.date)}</td>
                 <td style={{ textAlign: 'left', padding: '6px 8px' }}>
-                  <Link href={`/partita/${p.match_name}?tenant=${tenant}`} style={{ color: 'var(--text)' }}>{nomePartita(p)}</Link>
+                  <LinkPartita tenant={tenant} match={p.match_name} style={{ color: 'var(--text)' }}>{nomePartita(p)}</LinkPartita>
                 </td>
                 <td style={{ padding: '6px 8px', color: 'var(--text-muted)' }}>{p.gf}-{p.gs}</td>
                 {voci.map(c => (

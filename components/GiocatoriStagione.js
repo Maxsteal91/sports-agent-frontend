@@ -6,6 +6,7 @@ import { fetchAPI } from '../lib/api'
 import { useTenant } from '../lib/TenantContext'
 import CampoAnalisi from './CampoAnalisi'
 import { GRUPPI_EVENTI, etichetta, percento } from '../lib/sintesi'
+import { daIndirizzo, scriviVista } from '../lib/vista'
 
 // Sezione Giocatori per i tenant con partite Veo, la nostra squadra sulla stagione:
 //   tabella   voci di Admin raggruppate per evento, presenze / titolare / minuti, Totali o Per 90',
@@ -24,7 +25,8 @@ const cognome = nome => { const w = (nome || '').split(' '); return w.length > 1
 const dec = (x, k = 1) => x == null ? null : Number(x).toFixed(k).replace('.', ',')
 const data = d => d ? `${d.slice(8, 10)}/${MESI[Number(d.slice(5, 7)) - 1]}/${d.slice(2, 4)}` : ''
 
-export default function GiocatoriStagione({ tenant, categoria, partite, noi }) {
+// scelteEsterne: partite gia' filtrate dalla pagina Stagione (tab Giocatori): niente filtro proprio
+export default function GiocatoriStagione({ tenant, categoria, partite, noi, scelteEsterne }) {
   const { tagVisibili, tagLabel } = useTenant()
   const n = (noi || '').toLowerCase()
   const [colConfig, setColConfig] = useState({})
@@ -33,12 +35,19 @@ export default function GiocatoriStagione({ tenant, categoria, partite, noi }) {
   const [per90, setPer90] = useState(false)
   const [righe, setRighe] = useState([])
   const [ordine, setOrdine] = useState(null)
-  const [spuntati, setSpuntati] = useState([])          // nome_norm per il confronto
-  const [vista, setVista] = useState({ tipo: 'tabella' }) // tabella | scheda {g} | confronto
+  // scheda aperta (s) e giocatori del confronto (gg) ripresi dall'indirizzo e scritti a ogni cambio (lib/vista.js)
+  const ggIniziali = (daIndirizzo('gg') || '').split(',').filter(Boolean).slice(0, 3)
+  const [spuntati, setSpuntati] = useState(ggIniziali)  // nome_norm per il confronto
+  const [vista, setVista] = useState(() => daIndirizzo('s') ? { tipo: 'scheda', g: daIndirizzo('s') }
+    : ggIniziali.length >= 2 ? { tipo: 'confronto' } : { tipo: 'tabella' })   // tabella | scheda {g} | confronto
+  useEffect(() => {
+    scriviVista({ s: vista.tipo === 'scheda' ? vista.g : null, gg: vista.tipo === 'confronto' ? spuntati.join(',') : null,
+      ...(vista.tipo === 'scheda' ? {} : { st: null }) })
+  }, [vista.tipo, vista.g, spuntati.join(',')])
 
   const elenco = useMemo(() => [...partite].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
     .map(p => ({ ...p, casa: (p.home_team || '').toLowerCase() === n, avversario: (p.home_team || '').toLowerCase() === n ? p.away_team : p.home_team })), [partite, n])
-  const scelte = elenco.filter(p => filtro === 'casa' ? p.casa : filtro === 'trasferta' ? !p.casa : true).slice(filtro === 'ultime5' ? -5 : 0)
+  const scelte = scelteEsterne || elenco.filter(p => filtro === 'casa' ? p.casa : filtro === 'trasferta' ? !p.casa : true).slice(filtro === 'ultime5' ? -5 : 0)
   const listaPartite = scelte.map(p => p.match_name).join(',')
   const catParam = categoria ? `&category=${categoria}` : ''
 
@@ -68,10 +77,12 @@ export default function GiocatoriStagione({ tenant, categoria, partite, noi }) {
   const barra = (
     <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
       {vista.tipo !== 'tabella' && <span onClick={() => setVista({ tipo: 'tabella' })} style={{ fontSize: 13, color: 'var(--text-muted)', cursor: 'pointer' }}>← tabella</span>}
-      <div style={segmento}>
-        {FILTRI.map(([k, l]) => <div key={k} onClick={() => setFiltro(k)} style={{ ...voceSeg, ...(filtro === k ? segAttivo : {}) }}>{l}</div>)}
-      </div>
-      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{scelte.length} partite</span>
+      {!scelteEsterne && <>
+        <div style={segmento}>
+          {FILTRI.map(([k, l]) => <div key={k} onClick={() => setFiltro(k)} style={{ ...voceSeg, ...(filtro === k ? segAttivo : {}) }}>{l}</div>)}
+        </div>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{scelte.length} partite</span>
+      </>}
     </div>
   )
 
@@ -159,13 +170,14 @@ export default function GiocatoriStagione({ tenant, categoria, partite, noi }) {
 
 // ── scheda del giocatore sulla stagione ──────────────────────────────────
 function Scheda({ g, tenant, catParam, scelte, colonne, eventi, righe, tagLabel, n, noi, listaPartite, minuti }) {
-  const [tab, setTab] = useState('sintesi')
+  const [tab, setTab] = useState(() => ['campo', 'andamento'].includes(daIndirizzo('st')) ? daIndirizzo('st') : 'sintesi')
   const [tipo, setTipo] = useState(null)
   const [perPartita, setPerPartita] = useState({})     // et -> {match_name: totale} (sintesi)
+  useEffect(() => { scriviVista({ st: tab === 'sintesi' ? null : tab, ...(tipo ? { ev: tipo } : {}) }) }, [tab, tipo])
   const min = minuti(g), pf = g.performance || {}
   const suoi = eventi.filter(et => g.events?.[et]?.totale)
   const totale = et => righe.reduce((s, x) => s + Number(x.events?.[et]?.totale ?? 0), 0)
-  useEffect(() => { setTipo(suoi[0] || null) }, [g.nome_norm])
+  useEffect(() => { const ev = daIndirizzo('ev'); setTipo(suoi.includes(ev) ? ev : suoi[0] || null) }, [g.nome_norm])
   useEffect(() => {    // partita per partita di ogni suo evento (mini-barre della sintesi)
     let vivo = true
     Promise.all(suoi.map(et => fetchAPI(`/v2/analytics/${tenant}/conteggi?event_type=${encodeURIComponent(et)}&giocatore=${encodeURIComponent(g.nome_norm)}${catParam}`)
@@ -185,14 +197,14 @@ function Scheda({ g, tenant, catParam, scelte, colonne, eventi, righe, tagLabel,
         <div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase', color: 'var(--text)' }}>{g.player}</div>
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-            {g.presenze} presenze ({g.titolare} da titolare) · {min}' giocati{amm ? ` · ${amm} ammonizioni` : ''}{esp ? ` · ${esp} espulsioni` : ''}
+            {g.presenze} presenze ({g.titolare} da titolare) · {min}' giocati{amm ? ` · ${amm} ${amm === 1 ? "ammonizione" : "ammonizioni"}` : ''}{esp ? ` · ${esp} ${esp === 1 ? "espulsione" : "espulsioni"}` : ''}
             {g.events?.shot?.gol ? ` · ${g.events.shot.gol} gol` : ''}
           </div>
         </div>
       </div>
       {pf.minuti && (
         <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', padding: '10px 4px', margin: '8px 0', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
-          {[['Km', dec(pf.distanza_km)], ["Km / 90'", pf.distanza_km != null && min ? (pf.distanza_km * 90 / min).toFixed(1).replace('.', ',') : null],
+          {[['Minuti', min ? `${min}'` : null], ['Km', dec(pf.distanza_km)], ["Km / 90'", pf.distanza_km != null && min ? (pf.distanza_km * 90 / min).toFixed(1).replace('.', ',') : null],
             ['Vel. media', pf.velocita_media_kmh != null ? `${dec(pf.velocita_media_kmh)} km/h` : null], ['Vel. massima', pf.velocita_massima_kmh != null ? `${dec(pf.velocita_massima_kmh)} km/h` : null],
             ['Sprint', pf.sprint], ['Alta intensità', pf.corse_alta_intensita]].filter(([, v]) => v != null).map(([k, v]) => (
             <div key={k}><div style={kpiLab}>{k}</div><b style={{ fontSize: 15, color: 'var(--text)' }}>{v}</b></div>
@@ -355,7 +367,8 @@ function Andamento({ g, tipo, setTipo, tipi, tenant, catParam, scelte, colonne, 
 // ── confronto di 2-3 giocatori sulla stagione: strip con tutti gli eventi, campi affiancati ──
 function Confronto({ gg, tenant, catParam, scelte, colonne, eventi, tagLabel, n, noi, minuti }) {
   const tipi = eventi.filter(et => gg.some(g => g.events?.[et]?.totale))
-  const [tipo, setTipo] = useState(tipi[0])
+  const [tipo, setTipo] = useState(() => tipi.includes(daIndirizzo('ev')) ? daIndirizzo('ev') : tipi[0])
+  useEffect(() => { if (tipo) scriviVista({ ev: tipo }) }, [tipo])
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
