@@ -224,8 +224,7 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
                       <Campo />
                       {vista === 'heatmap'
                         ? <Heatmap punti={pts} colore={l.colore} colonne={GRIGLIE[griglia][0]} righe={GRIGLIE[griglia][1]} />
-                        : [...pts.filter(d => d.attrs?.pericolosa !== 'si'), ...pts.filter(d => d.attrs?.pericolosa === 'si')]
-                            .map((d, k) => <Punto key={k} d={d} colore={l.colore} tipo={tipo} />)}
+                        : inOrdine(pts, tipo).map((d, k) => <Punto key={k} d={d} colore={l.colore} tipo={tipo} />)}
                     </svg>
                     {direzione && <div style={{ ...freccia, right: 8, fontSize: 11, color: direzione.destra.colore }}>{direzione.destra.label} attacca →</div>}
                     {caricamento && <div style={velo}>Caricamento...</div>}
@@ -283,10 +282,7 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
                 <Campo />
                 {vista === 'heatmap'
                   ? <Heatmap punti={visibili} colore={lati[lato ?? latoNostro].colore} colonne={GRIGLIE[griglia][0]} righe={GRIGLIE[griglia][1]} />
-                  : <>
-                      {visibili.filter(d => d.attrs?.pericolosa !== 'si').map((d, i) => <Punto key={`n${i}`} d={d} colore={lati[latoDi(d)]?.colore || '#888'} tipo={tipo} />)}
-                      {visibili.filter(d => d.attrs?.pericolosa === 'si').map((d, i) => <Punto key={`p${i}`} d={d} colore={lati[latoDi(d)]?.colore || '#888'} tipo={tipo} />)}
-                    </>}
+                  : inOrdine(visibili, tipo).map((d, i) => <Punto key={i} d={d} colore={lati[latoDi(d)]?.colore || '#888'} tipo={tipo} />)}
               </svg>
               {direzione && <>
                 <div style={{ ...freccia, left: 12, color: direzione.sinistra.colore }}>← {direzione.sinistra.label} attacca</div>
@@ -371,16 +367,31 @@ function Heatmap({ punti, colore, colonne, righe }) {
   )
 }
 
+// ordine di disegno: prima i punti normali, poi i pericolosi, in cima i gol (nessun pallino li copre)
+const golDi = (d, tipo) => tipo === 'shot' && d.attrs?.outcome === 'gol'
+const inOrdine = (pts, tipo) => {
+  const peso = d => golDi(d, tipo) ? 2 : d.attrs?.pericolosa === 'si' ? 1 : 0
+  return [0, 1, 2].flatMap(k => pts.filter(d => peso(d) === k))
+}
+// stella a 5 punte di raggio r
+const stella = (x, y, r) => Array.from({ length: 10 }, (_, i) => {
+  const a = -Math.PI / 2 + i * Math.PI / 5, q = i % 2 ? r * 0.45 : r
+  return `${(x + q * Math.cos(a)).toFixed(1)},${(y + q * Math.sin(a)).toFixed(1)}`
+}).join(' ')
+
 function Punto({ d, colore, tipo }) {
   const x = sx(d.x), y = sy(d.y)
   const per = d.attrs?.pericolosa
-  const gol = tipo === 'shot' && d.attrs?.outcome === 'gol'
+  const gol = golDi(d, tipo)
   const linea = d.x2 != null && d.y2 != null && ['cross', 'calcio_piazzato'].includes(tipo)
   return (
     <g>
       <title>{titoloPunto(d)}</title>
       {linea && <line x1={x} y1={y} x2={sx(d.x2)} y2={sy(d.y2)} stroke={colore} strokeWidth={1.2} opacity={0.45} />}
-      {gol ? <text x={x} y={y + 6} textAnchor="middle" fontSize={18} fill={colore} stroke="white" strokeWidth={0.8}>★</text>
+      {gol ? <>{/* gol: stella grande bianca, bordo nel colore della squadra, alone scuro per staccarla dai pallini */}
+          <polygon points={stella(x, y, 12)} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth={6} strokeLinejoin="round" />
+          <polygon points={stella(x, y, 12)} fill="white" stroke={colore} strokeWidth={2.5} strokeLinejoin="round" />
+        </>
         : per === 'si' ? <circle cx={x} cy={y} r={7.5} fill={colore} stroke="white" strokeWidth={2} />
         : <circle cx={x} cy={y} r={per === 'no' ? 4.5 : 5.5} fill={colore} opacity={per === 'no' ? 0.45 : 0.8} />}
     </g>
