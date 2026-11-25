@@ -64,5 +64,5 @@ const titolo = { fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '
 const sezione = { fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.12em', margin: '16px 0 6px',
                   paddingBottom: 5, borderBottom: '1px solid var(--border)', textAlign: 'center' }
 const numero = { fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.15rem', minWidth: 44, lineHeight: 1 }
-const mediaStile = { display: 'block', fontFamily: 'inherit', fontWeight: 400, fontSize: 10.5, color: 'var(--text-muted)' }
+const mediaStile = { display: 'block', fontFamily: 'inherit', fontWeight: 500, fontSize: 13, color: '#94A3B8', marginTop: 1 }
 const subStile = { fontSize: 11, color: 'var(--text-muted)', minWidth: 78 }
