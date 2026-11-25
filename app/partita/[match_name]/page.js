@@ -8,6 +8,7 @@ import { useTenant } from '../../../lib/TenantContext'
 import { titoloPunto } from '../../../lib/tempo'
 import SintesiGruppi from '../../../components/SintesiGruppi'
 import CampoAnalisi from '../../../components/CampoAnalisi'
+import GiocatoriPartita from '../../../components/GiocatoriPartita'
 import { valore } from '../../../lib/sintesi'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -106,10 +107,20 @@ const SOTTOFILTRI = {
     etichette: { angolo: 'Angoli', punizione: 'Punizioni', rimessa: 'Rimesse lunghe' } },
 }
 
-function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, matchName }) {
-  const [filtroTeam, setFiltroTeam] = useState('tutti')
+const COL_RICEVUTI_RETE = '#F59E0B'   // rete: passaggi ricevuti dai giocatori scelti
+// etichetta del verso d'attacco dentro il campo, negli angoli in alto
+const versoAttacco = { position: 'absolute', top: 4, fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 12, letterSpacing: '0.05em',
+  textTransform: 'uppercase', padding: '2px 8px', borderRadius: 5, background: 'rgba(10,15,28,0.75)' }
+
+function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, matchName, giocatoriScelti = [],
+                       latoEsterno, fasciaEsterna }) {
+  const [filtroTeamInterno, setFiltroTeam] = useState('tutti')
   const [rete, setRete] = useState(null)
-  const [fascia, setFascia] = useState(null)
+  const [fasciaInterna, setFascia] = useState(null)
+  // nel Campo (partite Veo) squadra e fascia della rete vengono dalla barra comune: niente barra propria
+  const esterno = latoEsterno != null
+  const filtroTeam = esterno ? (latoEsterno === 0 ? 'home' : 'away') : filtroTeamInterno
+  const fascia = esterno ? fasciaEsterna : fasciaInterna
   const norm = t => (t || '').toLowerCase().trim()
   const teamAn = norm(teamA)
 
@@ -119,6 +130,11 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, mat
   const nostraInTrasferta = !!tenant && norm(teamB).includes(norm(tenant).split('_')[0])
   const reteLato = filtroTeam === 'tutti' ? (nostraInTrasferta ? 'away' : 'home') : filtroTeam
   const reteTeam = reteLato === 'away' ? teamB : teamA
+  // giocatori scelti nel campo: la rete e' della loro squadra e mostra solo i loro passaggi (dati e ricevuti)
+  const sceltiKey = giocatoriScelti.map(g => `${g.lato}|${g.numero}`).join(',')
+  useEffect(() => { if (giocatoriScelti.length && !esterno) setFiltroTeam(giocatoriScelti[0].lato === 0 ? 'home' : 'away') }, [sceltiKey])
+  const latoRete = reteLato === 'away' ? 1 : 0
+  const sel = new Set(giocatoriScelti.filter(g => g.lato === latoRete).map(g => String(g.numero)))
   useEffect(() => {
     if (!isRete || !tenant || !matchName) return
     setRete(null)
@@ -391,14 +407,22 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, mat
     if (!isRete || !rete) return null
     const col = reteTeam === teamA ? COLOR_HOME : COLOR_AWAY
     const pos = Object.fromEntries(rete.nodi.map(n => [n.numero, { x: sx(n.x), y: sy(n.y) }]))
+    const conSel = a => !sel.size || sel.has(String(a.da)) || sel.has(String(a.a))
+    // valore del pallino (grandezza e numero giallo): i passaggi del giocatore; con giocatori scelti,
+    // per i compagni i passaggi scambiati con loro (dati + ricevuti), per gli scelti il loro totale
+    const valoreNodo = n => !sel.size || sel.has(String(n.numero)) ? (n.passaggi || 0)
+      : rete.archi.filter(a => conSel(a) && (String(a.da) === String(n.numero) || String(a.a) === String(n.numero))).reduce((t, a) => t + a.n, 0)
     // grandezza relativa alla vista: chi passa di piu' in questa fascia ha il pallino piu' grande
-    const pass = rete.nodi.map(n => n.passaggi || 0)
+    const pass = rete.nodi.filter(n => !sel.has(String(n.numero))).map(valoreNodo)
     const minP = Math.min(...pass), maxP = Math.max(...pass)
-    const raggio = n => 7 + 15 * Math.sqrt(maxP > minP ? ((n.passaggi || 0) - minP) / (maxP - minP) : 0.5)
+    const raggio = n => sel.has(String(n.numero)) ? 20
+      : 7 + 15 * Math.sqrt(maxP > minP ? (valoreNodo(n) - minP) / (maxP - minP) : 0.5)
     const nodo = Object.fromEntries(rete.nodi.map(n => [n.numero, n]))
-    const tutti = rete.archi.filter(a => pos[a.da] && pos[a.a])
-    const archi = tutti.filter(a => a.n >= reteMin)
-    const deboli = tutti.filter(a => a.n < reteMin)
+    const tutti = rete.archi.filter(a => pos[a.da] && pos[a.a] && conSel(a))
+    // con giocatori scelti: tutte le loro frecce (anche un solo passaggio)
+    const archi = tutti.filter(a => sel.size ? a.n >= 1 : a.n >= reteMin)
+    const deboli = tutti.filter(a => !sel.size && a.n < reteMin)
+    const coinvolti = new Set([...sel, ...tutti.flatMap(a => [String(a.da), String(a.a)])])
     const maxN = Math.max(1, ...archi.map(a => a.n))
     const alone = { paintOrder: 'stroke', stroke: 'rgba(0,0,0,0.7)', strokeWidth: 3 }
     return (
@@ -407,6 +431,10 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, mat
           <marker id="freccia-rete" viewBox="0 0 10 10" refX={9} refY={5} markerWidth={9} markerHeight={9}
             markerUnits="userSpaceOnUse" orient="auto">
             <path d="M0,0 L10,5 L0,10 z" fill={col} />
+          </marker>
+          <marker id="freccia-ricevuti" viewBox="0 0 10 10" refX={9} refY={5} markerWidth={9} markerHeight={9}
+            markerUnits="userSpaceOnUse" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill={COL_RICEVUTI_RETE} />
           </marker>
         </defs>
         {deboli.map((a, i) => {
@@ -420,11 +448,13 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, mat
           const r1 = raggio(nodo[a.da]), r2 = raggio(nodo[a.a]) + 3
           const x1 = p.x + dx / L * r1 + ox, y1 = p.y + dy / L * r1 + oy
           const x2 = q.x - dx / L * r2 + ox, y2 = q.y - dy / L * r2 + oy
+          // giocatori scelti: passaggi ricevuti da loro in arancione, dati nel colore della squadra
+          const ricevuto = sel.size > 0 && sel.has(String(a.a)) && !sel.has(String(a.da))
           return (
             <g key={i}>
               <line x1={x1} y1={y1} x2={x2} y2={y2}
-                stroke={col} strokeWidth={1 + 5 * a.n / maxN} opacity={0.35 + 0.5 * a.n / maxN}
-                strokeLinecap="round" markerEnd="url(#freccia-rete)" />
+                stroke={ricevuto ? COL_RICEVUTI_RETE : col} strokeWidth={1 + 5 * a.n / maxN} opacity={0.35 + 0.5 * a.n / maxN}
+                strokeLinecap="round" markerEnd={ricevuto ? 'url(#freccia-ricevuti)' : 'url(#freccia-rete)'} />
               {fascia && L > 45 && (   /* numero sulla freccia solo nelle fasce di 15' */
                 <text x={(x1 + x2) / 2 + ox * 2.5} y={(y1 + y2) / 2 + oy * 2.5 + 3} textAnchor="middle"
                   fontSize={9} fontWeight="bold" fill="white" style={alone}>{a.n}</text>
@@ -432,7 +462,7 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, mat
             </g>
           )
         })}
-        {rete.nodi.map(n => {
+        {rete.nodi.filter(n => !sel.size || coinvolti.has(String(n.numero))).map(n => {
           const { x, y } = pos[n.numero], r = raggio(n)
           const cognome = (n.cognome || (n.nome || '').split(' ')[0]).toUpperCase()   // anagrafica: "Cognome Nome"
           return (
@@ -442,7 +472,7 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, mat
                 ? <circle cx={x} cy={y} r={r} fill={col} fillOpacity={0.35} stroke="white" strokeWidth={1.5} strokeDasharray="3,2" />
                 : <circle cx={x} cy={y} r={r} fill={col} opacity={0.9} stroke="white" strokeWidth={1.5} />}
               <text x={x} y={y + 4} textAnchor="middle" fontSize={11} fontWeight="bold" fill={n.subentrato ? 'white' : '#0B1220'}>{n.numero}</text>
-              <text x={x + r * 0.75 + 2} y={y - r * 0.75} fontSize={10} fontWeight="bold" fill="#FDE68A" style={alone}>{n.passaggi}</text>
+              <text x={x + r * 0.75 + 2} y={y - r * 0.75} fontSize={10} fontWeight="bold" fill="#FDE68A" style={alone}>{valoreNodo(n)}</text>
               {cognome && <text x={x} y={y + r + 11} textAnchor="middle" fontSize={9} fill="white"
                 style={{ paintOrder: 'stroke', stroke: 'rgba(0,0,0,0.6)', strokeWidth: 2 }}>{cognome}</text>}
             </g>
@@ -460,7 +490,7 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, mat
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-      <div style={{ display: 'flex', gap: 8, alignSelf: 'flex-start', alignItems: 'center', width: '100%' }}>
+      {!esterno && <div style={{ display: 'flex', gap: 8, alignSelf: 'flex-start', alignItems: 'center', width: '100%' }}>
         {[
           ...(isRete ? [] : [{ key: 'tutti', label: 'Entrambe', color: '#94A3B8', n: data.length }]),
           { key: 'home',  label: teamA,      color: COLOR_HOME, n: nHome },
@@ -480,23 +510,19 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, mat
           </button>
           )
         })}
+        {isRete && RETE_FASCE.map(([k, label]) => (
+          <button key={label} onClick={() => setFascia(k)} style={{
+            padding: '4px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
+            border: `1px solid ${fascia === k ? 'var(--primary)' : 'rgba(255,255,255,0.12)'}`,
+            background: fascia === k ? 'rgba(0,229,255,0.1)' : 'transparent',
+            color: fascia === k ? 'var(--primary)' : '#64748B',
+          }}>{label}</button>
+        ))}
         <span style={{ marginLeft: 'auto', fontSize: 11, color: '#475569' }}>
           {isRete ? (rete ? `${rete.archi.filter(a => a.n >= reteMin).length} collegamenti` : 'Caricamento...') : `${filtered.length} eventi`}
         </span>
-      </div>
+      </div>}
 
-      {isRete && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignSelf: 'flex-start' }}>
-          {RETE_FASCE.map(([k, label]) => (
-            <button key={label} onClick={() => setFascia(k)} style={{
-              padding: '4px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
-              border: `1px solid ${fascia === k ? 'var(--primary)' : 'rgba(255,255,255,0.12)'}`,
-              background: fascia === k ? 'rgba(0,229,255,0.1)' : 'transparent',
-              color: fascia === k ? 'var(--primary)' : '#64748B',
-            }}>{label}</button>
-          ))}
-        </div>
-      )}
 
       {!isRete && (sotto && valori.length > 1 || conPericolo) && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignSelf: 'flex-start' }}>
@@ -519,7 +545,7 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, mat
         </div>
       )}
 
-      {sourceFormat === 'veo' && (
+      {sourceFormat === 'veo' && !isRete && (
         <div style={{ display: 'flex', justifyContent: 'space-between', width: W, fontSize: 12, fontWeight: 700,
           fontFamily: 'var(--font-display)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
           {/* Veo: campo girato, la nostra squadra attacca sempre verso destra */}
@@ -528,45 +554,84 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, mat
         </div>
       )}
 
-      <div style={{ borderRadius: 8, overflow: 'hidden', border: '1.5px solid rgba(255,255,255,0.15)', boxShadow: '0 4px 24px rgba(0,0,0,0.5)' }}>
-        <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
-          {isBalloni ? balloniField : vidswapField}
-          {isRete ? reteSvg : filtered.map((d, i) => <g key={i}><title>{titoloPunto(d)}</title>{marker(d, i)}</g>)}
-        </svg>
-      </div>
-
       {isRete ? (
-        <div style={{ fontSize: 11, color: '#64748B', textAlign: 'center', maxWidth: W }}>
-          Pallino = posizione media del giocatore {rete?.fonte === 'tracking' ? 'quando la squadra ha il pallone' : '(media dei punti da cui passa)'},
-          più grande = più passaggi in questa vista (numero giallo); tratteggiato = entrato a partita in corso.
-          Frecce = almeno {reteMin} passaggi riusciti{fascia ? ' (numero sulla freccia)' : ''}, linee sottili = meno.
-          {sourceFormat === 'veo' && ' La nostra squadra attacca verso destra, l\'avversaria verso sinistra.'}
-          {rete && rete.nodi.length > 0 && (
-            <table style={{ margin: '12px auto 0', borderCollapse: 'collapse', fontSize: 12, color: '#CBD5E1' }}>
-              <thead>
-                <tr style={{ color: '#64748B', textAlign: 'right' }}>
-                  <th style={{ textAlign: 'left', padding: '3px 10px' }}>Giocatore</th>
-                  <th style={{ padding: '3px 10px' }}>Passaggi</th>
-                  <th style={{ padding: '3px 10px' }}>Riusciti</th>
-                  <th style={{ padding: '3px 10px' }}>Ricevuti</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rete.nodi.map(n => (
-                  <tr key={n.numero} style={{ borderTop: '1px solid rgba(255,255,255,0.06)', textAlign: 'right' }}>
-                    <td style={{ textAlign: 'left', padding: '3px 10px' }}>
-                      {n.numero} {n.nome || ''}{n.subentrato ? ' (sub.)' : ''}
-                    </td>
-                    <td style={{ padding: '3px 10px' }}>{n.passaggi}</td>
-                    <td style={{ padding: '3px 10px' }}>{n.riusciti}</td>
-                    <td style={{ padding: '3px 10px' }}>{n.ricevuti}</td>
-                  </tr>
+        // rete dei passaggi: grafo a sinistra, tabella dei giocatori a destra (clic = evidenzia nel grafo)
+        <div style={{ display: 'grid', gridTemplateColumns: `${W}px minmax(240px, 1fr)`, gap: 20, alignItems: 'start', width: '100%' }}>
+          <div>
+            <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '1.5px solid rgba(255,255,255,0.15)', boxShadow: '0 4px 24px rgba(0,0,0,0.5)' }}>
+              <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+                {isBalloni ? balloniField : vidswapField}
+                {reteSvg}
+              </svg>
+              {sourceFormat === 'veo' && <>
+                {/* Veo: campo girato, la nostra squadra attacca sempre verso destra */}
+                <div style={{ ...versoAttacco, left: 8, color: nostraInTrasferta ? COLOR_HOME : COLOR_AWAY }}>← {nostraInTrasferta ? teamA : teamB} attacca</div>
+                <div style={{ ...versoAttacco, right: 8, color: nostraInTrasferta ? COLOR_AWAY : COLOR_HOME }}>{nostraInTrasferta ? teamB : teamA} attacca →</div>
+              </>}
+            </div>
+            <div style={{ fontSize: 11, color: '#64748B', marginTop: 8, lineHeight: 1.45 }}>
+              Pallino = posizione media del giocatore {rete?.fonte === 'tracking' ? 'quando la squadra ha il pallone' : '(media dei punti da cui passa)'},
+              più grande = più passaggi in questa vista (numero giallo); tratteggiato = entrato a partita in corso.
+              {sel.size ? <>Solo i passaggi dei giocatori scelti: <span style={{ color: reteTeam === teamA ? COLOR_HOME : COLOR_AWAY }}>dati</span>, <span style={{ color: COL_RICEVUTI_RETE }}>ricevuti</span> (anche un solo passaggio).</>
+                : <>Frecce = almeno {reteMin} passaggi riusciti{fascia ? ' (numero sulla freccia)' : ''}, linee sottili = meno.</>}
+            </div>
+          </div>
+          {rete && rete.nodi.length > 0 && sel.size === 1 && (() => {
+            const io = [...sel][0], me = rete.nodi.find(n => String(n.numero) === io)
+            const n_ = (da, a) => rete.archi.find(x => String(x.da) === da && String(x.a) === a)?.n || 0
+            const compagni = rete.nodi.filter(n => String(n.numero) !== io)
+              .map(n => ({ ...n, dati: n_(io, String(n.numero)), ricevuti_da: n_(String(n.numero), io) }))
+              .filter(n => n.dati || n.ricevuti_da).sort((a, b) => (b.dati + b.ricevuti_da) - (a.dati + a.ricevuti_da))
+            return (
+              <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 12, fontSize: 13 }}>
+                {me && <div style={{ display: 'flex', justifyContent: 'space-around', padding: '2px 0 10px', borderBottom: '1px solid var(--border)', marginBottom: 6 }}>
+                  {[['Passaggi', me.passaggi], ['Riusciti', me.riusciti], ['%', me.passaggi ? `${Math.round(100 * me.riusciti / me.passaggi)}%` : '–'], ['Ricevuti', me.ricevuti]].map(([k, v]) => (
+                    <div key={k} style={{ textAlign: 'center' }}><div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{k}</div><b>{v}</b></div>
+                  ))}
+                </div>}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 60px', fontSize: 10.5, color: 'var(--text-muted)',
+                  textTransform: 'uppercase', letterSpacing: '0.05em', padding: '0 8px 4px', textAlign: 'right' }}>
+                  <span style={{ textAlign: 'left' }}>Compagno</span><span>Dati</span><span>Ricevuti</span>
+                </div>
+                {compagni.map(n => (
+                  <div key={n.numero} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 60px', padding: '5px 8px', textAlign: 'right', color: 'var(--text)' }}>
+                    <span style={{ textAlign: 'left' }}><b>{n.numero}</b> {(n.cognome || n.nome || '').toUpperCase()}</span><span>{n.dati}</span><span>{n.ricevuti_da}</span>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10 }}>Passaggi dati e ricevuti con ogni compagno (riusciti).</div>
+              </div>
+            )
+          })()}
+          {rete && rete.nodi.length > 0 && sel.size !== 1 && (
+            <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 12, fontSize: 13 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 52px 52px 52px', fontSize: 10.5, color: 'var(--text-muted)',
+                textTransform: 'uppercase', letterSpacing: '0.05em', padding: '0 8px 4px', textAlign: 'right' }}>
+                <span style={{ textAlign: 'left' }}>Giocatore</span><span>Pass.</span><span>Riusc.</span><span>Ricev.</span>
+              </div>
+              {rete.nodi.filter(n => !sel.size || sel.has(String(n.numero))).map(n => (
+                <div key={n.numero} style={{ display: 'grid', gridTemplateColumns: '1fr 52px 52px 52px', padding: '5px 8px', textAlign: 'right', color: 'var(--text)' }}>
+                  <span style={{ textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <b>{n.numero}</b> {(n.cognome || n.nome || '').toUpperCase()}{n.subentrato ? <small style={{ color: 'var(--text-muted)' }}> sub.</small> : null}
+                  </span>
+                  <span>{n.passaggi}</span><span>{n.riusciti}</span><span>{n.ricevuti}</span>
+                </div>
+              ))}
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10, lineHeight: 1.45 }}>
+                Per i passaggi di uno o più giocatori sceglili nel filtro Giocatori, sopra il campo.
+              </div>
+            </div>
           )}
         </div>
-      ) : shotSymbolLegend || (
+      ) : (
+        <div style={{ borderRadius: 8, overflow: 'hidden', border: '1.5px solid rgba(255,255,255,0.15)', boxShadow: '0 4px 24px rgba(0,0,0,0.5)' }}>
+          <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+            {isBalloni ? balloniField : vidswapField}
+            {filtered.map((d, i) => <g key={i}><title>{titoloPunto(d)}</title>{marker(d, i)}</g>)}
+          </svg>
+        </div>
+      )}
+
+      {isRete ? null : shotSymbolLegend || (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11, color: '#64748B', justifyContent: 'center' }}>
           {legendItems.map(([col, label]) => (
             <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -741,6 +806,7 @@ export default function PartitaPage() {
   const [giocatoriData,    setGiocatoriData]    = useState([])
   const [giocatoriLoaded,  setGiocatoriLoaded]  = useState(false)
   const [colConfig,        setColConfig]        = useState({})
+  const [campoGiocatori,   setCampoGiocatori]   = useState([])   // giocatori scelti aprendo il campo dalla scheda
 
   // colonne di Admin -> Eventi e statistiche: il pannello del campo usa le stesse
   useEffect(() => {
@@ -784,7 +850,7 @@ export default function PartitaPage() {
 
   // Fetch giocatori — lazy, solo quando si apre il tab
   useEffect(() => {
-    if (tab !== 'giocatori' || giocatoriLoaded || !match_name || !userReady) return
+    if (!['giocatori', 'campo'].includes(tab) || giocatoriLoaded || !match_name || !userReady) return
     fetchAPI(`/v2/analytics/${tenant}/giocatori/${match_name}`)
       .then(res => { setGiocatoriData(res.data || []); setGiocatoriLoaded(true) })
       .catch(() => setGiocatoriLoaded(true))
@@ -914,6 +980,10 @@ export default function PartitaPage() {
         <Section title="Campo">
           <CampoAnalisi eventi={mappaData} tipi={tipiEffettivi} tipo={mappaEventType} onTipo={setMappaEventType}
             nomeTipo={tagLabel} caricamento={mappaLoading} latoNostro={nostraInTrasferta ? 1 : 0}
+            giocatori={giocatoriData.filter(p => p.numero).map(p => ({ numero: String(p.numero), nome: p.player, lato: norm(p.team) === norm(teamA) ? 0 : 1,
+              totali: Object.fromEntries(Object.entries(p.events || {}).map(([et, v]) => [et, v.totale || 0])) }))
+              .sort((a, b) => a.lato - b.lato || Number(a.numero) - Number(b.numero))}
+            giocatoriIniziali={campoGiocatori}
             colonne={colConfig[mappaEventType] || []}
             lati={[{ label: teamA, colore: COLOR_HOME, appartiene: d => norm(d.team) === norm(teamA) },
                    { label: teamB, colore: COLOR_AWAY, appartiene: d => norm(d.team) !== norm(teamA) }]}
@@ -921,7 +991,9 @@ export default function PartitaPage() {
               ? { sinistra: { label: teamA, colore: COLOR_HOME }, destra: { label: teamB, colore: COLOR_AWAY } }
               : { sinistra: { label: teamB, colore: COLOR_AWAY }, destra: { label: teamA, colore: COLOR_HOME } }}
             sostituto={mappaEventType === 'passaggi'
-              ? <MappaCampoV2 data={mappaData} eventType="passaggi" teamA={teamA} teamB={teamB} sourceFormat={partita?.source_format} tenant={tenant} matchName={match_name} />
+              ? ({ scelti, lato, fascia }) => <MappaCampoV2 data={mappaData} eventType="passaggi" teamA={teamA} teamB={teamB}
+                  sourceFormat={partita?.source_format} tenant={tenant} matchName={match_name} giocatoriScelti={scelti}
+                  latoEsterno={lato} fasciaEsterna={fascia} />
               : null} />
         </Section>
       )}
@@ -1167,7 +1239,19 @@ export default function PartitaPage() {
         </Section>
       )}
 
-      {tab === 'giocatori' && (
+      {tab === 'giocatori' && isVeo && (
+        <Section title="Giocatori">
+          <GiocatoriPartita tenant={tenant} matchName={match_name} colConfig={colConfig} nostra={nostraInTrasferta ? 1 : 0}
+            squadre={[{ label: teamA, colore: COLOR_HOME, team: norm(teamA) }, { label: teamB, colore: COLOR_AWAY, team: norm(teamB) }]}
+            onApriCampo={(et, g) => {
+              if (et && tipiEffettivi.includes(et)) setMappaEventType(et)
+              setCampoGiocatori(g?.numero ? [{ numero: String(g.numero), nome: g.nome, lato: g.lato }] : [])
+              setTab('campo')
+            }} />
+        </Section>
+      )}
+
+      {tab === 'giocatori' && !isVeo && (
         <Section title="Statistiche Giocatori">
           {!giocatoriLoaded ? (
             <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Caricamento...</div>

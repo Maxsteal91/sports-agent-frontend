@@ -9,7 +9,8 @@ import { GRUPPI_EVENTI, etichetta } from '../lib/sintesi'
 //   lati     [{label, colore, appartiene: punto => bool}, ...] (le due squadre, o noi / avversari)
 //   colonne  colonne di Admin -> Eventi e statistiche per il tipo scelto ({label, visibile, filtro})
 //   direzione {sinistra, destra}: chi attacca da che parte; filtriExtra: controlli in piu' (es. partite)
-//   sostituto: nodo da mostrare al posto del campo (es. la rete dei passaggi)
+//   sostituto: nodo da mostrare al posto del campo (es. la rete dei passaggi), oppure funzione
+//   ({scelti, lato, fascia}) => nodo: giocatori scelti, squadra e fascia di 15' (1-6, null = tutta) della barra comune
 // Il pannello raggruppa le colonne per attributo (blocchi che sommano al totale); un clic filtra i punti.
 const FASCE = [['Tutta', null], ['1° tempo', ['Primo_Tempo', 0, 999]], ['2° tempo', ['Secondo_Tempo', 0, 999]],
   ["0-15'", ['Primo_Tempo', 0, 15]], ["15-30'", ['Primo_Tempo', 15, 30]], ["30-45'+", ['Primo_Tempo', 30, 999]],
@@ -18,22 +19,46 @@ const FASCE = [['Tutta', null], ['1° tempo', ['Primo_Tempo', 0, 999]], ['2° te
 const NOMI_BLOCCHI = { outcome: 'Esito', result: 'Esito', esito: 'Esito', zona: 'Zona', piede: 'Parte del corpo',
   motivo: 'Motivo', come: 'Come', pericolosa: 'Di cui', origine: 'Origine', lato: 'Lato', tipo: 'Tipo',
   battuta: 'Battuta', tiro: 'Con tiro', tipologia: 'Tipo', situazione: 'Situazione', tipo_possesso: 'Tipo' }
+// fasce di FASCE che la rete dei passaggi conosce (backend: fascia 1-6, null = tutta la partita)
+const FASCIA_RETE = { 0: null, 3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6 }
 const W = 620, PAD = 10, FW = W - 2 * PAD, FH = Math.round(FW * 68 / 105), H = FH + 2 * PAD
 const sx = x => PAD + (x / 100) * FW, sy = y => PAD + (y / 100) * FH
 
-export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lati, colonne = [], direzione,
-                                      filtriExtra, sostituto, caricamento, latoNostro = 0 }) {
-  const [lato, setLato] = useState(null)          // null = entrambi
+//   giocatori [{numero, nome, lato}] per il filtro giocatori (partita); giocatoriIniziali = scelti all'apertura
+//   (es. dalla scheda del giocatore). Con giocatori scelti (al massimo 3) le colonne del pannello e i colori
+//   della mappa sono i giocatori al posto delle squadre: uno = i suoi eventi, due o tre = confronto
+const COLORI_GIOCATORI = ['#00E5FF', '#F59E0B', '#22C55E']
+export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lati: latiSquadre, colonne = [], direzione,
+                                      filtriExtra, sostituto, caricamento, latoNostro = 0, giocatori, giocatoriIniziali,
+                                      affiancati = false }) {
+  // affiancati: i lati sono gia' dei giocatori (es. confronto della stagione) -> un campo per ciascuno
+  const [scelti, setScelti] = useState(giocatoriIniziali || [])
+  useEffect(() => { setScelti(giocatoriIniziali || []); setLato(null) }, [JSON.stringify(giocatoriIniziali || [])])
+  const lati = scelti.length ? scelti.map((g, i) => ({
+    label: `${g.numero} ${(g.nome || '').split(' ')[0]}`, corto: `${g.numero} ${(g.nome || '').split(' ')[0].slice(0, 5)}`,
+    colore: scelti.length === 1 ? latiSquadre[g.lato].colore : COLORI_GIOCATORI[i],
+    appartiene: d => String(d.player) === String(g.numero) && latiSquadre[g.lato].appartiene(d),
+  })) : latiSquadre
+  const [lato, setLato] = useState(null)          // null = entrambi (tutti i giocatori scelti)
+  const [latoRete, setLatoRete] = useState(null)  // sostituto (rete dei passaggi): squadra scelta
+  const latoReteEff = scelti.length ? scelti[0].lato : (latoRete ?? latoNostro)
   const [scelta, setScelta] = useState(null)      // {nome, valori, label}
   const [soloPericolose, setSoloPericolose] = useState(false)
   const [fascia, setFascia] = useState(0)
   const [vista, setVista] = useState('punti')     // punti | heatmap
   const [griglia, setGriglia] = useState(0)       // indice in GRIGLIE (heatmap)
   // heatmap: una squadra alla volta (due squadre nello stesso tassello non si leggono): la nostra
-  const cambiaVista = k => { setVista(k); if (k === 'heatmap' && lato == null) setLato(latoNostro) }
+  const cambiaVista = k => { setVista(k); if (k === 'heatmap' && lato == null) setLato(scelti.length ? 0 : latoNostro) }
+  const aggiungi = v => {
+    const g = (giocatori || []).find(x => `${x.lato}|${x.numero}` === v)
+    if (g && scelti.length < 3 && !scelti.some(s => s.numero === g.numero && s.lato === g.lato)) { setScelti([...scelti, g]); setLato(null) }
+  }
+  const togli = i => { setScelti(scelti.filter((_, k) => k !== i)); setLato(null) }
   const [menu, setMenu] = useState(false)
   const menuRef = useRef(null)
   useEffect(() => { setScelta(null); setSoloPericolose(false) }, [tipo])
+  // rete dei passaggi: 1° / 2° tempo non ci sono (solo tutta la partita e le fasce di 15')
+  useEffect(() => { if (sostituto && FASCIA_RETE[fascia] === undefined) setFascia(0) }, [tipo])
   useEffect(() => {
     const chiudi = e => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenu(false) }
     document.addEventListener('mousedown', chiudi)
@@ -45,7 +70,7 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
     const f = FASCE[fascia][1]
     return !f || (d.period === f[0] && d.minute >= f[1] && d.minute < f[2])
   }
-  const base = useMemo(() => (eventi || []).filter(d => d.x != null && nelTempo(d)), [eventi, fascia])
+  const base = (eventi || []).filter(d => d.x != null && nelTempo(d) && (!scelti.length || latoDi(d) >= 0))
   const conPericolo = base.some(d => d.attrs?.pericolosa)
   const passa = (d, f) => f.valori.includes(String(d.attrs?.[f.nome] ?? ''))
   const visibili = base.filter(d => (lato == null || latoDi(d) === lato)
@@ -59,8 +84,18 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
     if (!b) blocchi.push(b = { nome: c.filtro.nome, righe: [] })
     b.righe.push(c)
   }
+  const filtroPunti = d => (!scelta || passa(d, scelta)) && (!soloPericolose || d.attrs?.pericolosa === 'si')
   const conta = (i, f) => base.filter(d => latoDi(d) === i && (!f || passa(d, f))
     && (!soloPericolose || d.attrs?.pericolosa === 'si')).length
+
+  // striscia dei giocatori scelti: i loro totali per evento (dalla tabella giocatori), solo eventi con dati
+  const totScelti = scelti.map(g => (giocatori || []).find(x => x.lato === g.lato && String(x.numero) === String(g.numero))?.totali || {})
+  const vociStriscia = [...GRUPPI_EVENTI.flatMap(([, ets]) => ets), ...tipi].filter((et, i, a) => a.indexOf(et) === i)
+    .filter(et => tipi.includes(et) && totScelti.some(t => t[et]))
+  // giocatori scelti e l'evento attuale non ha numeri per nessuno di loro: il primo evento con dati
+  useEffect(() => {
+    if (scelti.length && vociStriscia.length && !vociStriscia.includes(tipo)) onTipo(vociStriscia[0])
+  }, [JSON.stringify(scelti), vociStriscia.join(','), tipo])
 
   // menu degli eventi a gruppi
   const gruppi = GRUPPI_EVENTI.map(([g, ets]) => [g, ets.filter(et => tipi.includes(et))])
@@ -71,7 +106,8 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
     <div>
       {/* barra: evento, squadre, filtri in piu' */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-        <div ref={menuRef} style={{ position: 'relative' }}>
+        {/* con giocatori scelti si cambia evento dalla striscia di riepilogo: il menu non serve */}
+        {!scelti.length && !affiancati && <div ref={menuRef} style={{ position: 'relative' }}>
           <button onClick={() => setMenu(m => !m)} style={{ ...selettore }}>
             {etichetta(nomeTipo(tipo))} <span style={{ color: 'var(--text-muted)' }}>▾</span>
           </button>
@@ -88,13 +124,23 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
               ))}
             </div>
           )}
-        </div>
-        {!sostituto && (
+        </div>}
+        {sostituto && (
           <div style={segmento}>
-            {(vista === 'heatmap' ? [0, 1] : [null, 0, 1]).map(i => (
+            {latiSquadre.map((l, i) => (
+              <div key={l.label} onClick={() => { setLatoRete(i); setScelti(scelti.filter(g => g.lato === i)) }}
+                style={{ ...voceSeg, ...(latoReteEff === i ? segAttivo : {}) }}>
+                <span style={{ width: 9, height: 9, borderRadius: '50%', background: l.colore, display: 'inline-block' }} />{l.label}
+              </div>
+            ))}
+          </div>
+        )}
+        {!sostituto && scelti.length < 2 && !affiancati && lati.length > 1 && (
+          <div style={segmento}>
+            {(vista === 'heatmap' ? lati.map((_, i) => i) : [null, ...lati.map((_, i) => i)]).map(i => (
               <div key={String(i)} onClick={() => setLato(i)} style={{ ...voceSeg, ...(lato === i ? segAttivo : {}) }}>
                 {i != null && <span style={{ width: 9, height: 9, borderRadius: '50%', background: lati[i].colore, display: 'inline-block' }} />}
-                {i == null ? 'Entrambe' : lati[i].label}
+                {i == null ? (scelti.length ? 'Tutti' : 'Entrambe') : lati[i].label}
                 <small style={{ color: 'var(--text-muted)' }}>{i == null ? base.length : base.filter(d => latoDi(d) === i).length}</small>
               </div>
             ))}
@@ -116,15 +162,120 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
         )}
         {filtriExtra}
       </div>
-      {!sostituto && (
+      {giocatori?.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Giocatori:</span>
+          {scelti.map((g, i) => (
+            <span key={`${g.lato}|${g.numero}`} onClick={() => togli(i)} title="Togli" style={{ ...chipG, borderColor: lati[i].colore, color: lati[i].colore }}>
+              {g.numero} {g.nome} ✕
+            </span>
+          ))}
+          {scelti.length < 3 && (
+            <select value="" onChange={e => aggiungi(e.target.value)} style={selectG}>
+              <option value="">{scelti.length ? '+ confronta con…' : '+ scegli un giocatore'}</option>
+              {[latoNostro, 1 - latoNostro].filter(li => latiSquadre[li]).map(li => (   /* prima la nostra squadra */
+                <optgroup key={latiSquadre[li].label} label={latiSquadre[li].label}>
+                  {giocatori.filter(g => g.lato === li).map(g => <option key={g.numero} value={`${li}|${g.numero}`}>{g.numero} {g.nome}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          )}
+          {scelti.length > 0 && <span onClick={() => { setScelti([]); setLato(null) }} style={{ fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>togli tutti</span>}
+        </div>
+      )}
+      {/* striscia di riepilogo dei giocatori scelti: tutti i loro eventi della partita; clic = quell'evento */}
+      {scelti.length > 0 && (() => {
+        return vociStriscia.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10, padding: '6px 8px',
+            border: '1px solid var(--border)', borderRadius: 8, background: 'rgba(255,255,255,0.02)' }}>
+            {vociStriscia.map(et => (
+              <span key={et} onClick={() => onTipo(et)} title="Vedi sul campo"
+                style={{ ...chip, display: 'inline-flex', gap: 6, alignItems: 'center', ...(et === tipo ? chipAttivo : {}) }}>
+                {etichetta(nomeTipo(et))}
+                {totScelti.map((t, i) => <b key={i} style={{ color: lati[i]?.colore }}>{t[et] || 0}</b>)
+                  .reduce((acc, el, i) => i ? [...acc, <span key={`s${i}`} style={{ color: 'var(--text-muted)' }}>·</span>, el] : [el], [])}
+              </span>
+            ))}
+          </div>
+        )
+      })()}
+      {(
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-          {FASCE.map(([l], i) => (
+          {FASCE.map(([l], i) => (sostituto && FASCIA_RETE[i] === undefined) ? null : (
             <button key={l} onClick={() => setFascia(i)} style={{ ...chip, ...(fascia === i ? chipAttivo : {}) }}>{l}</button>
           ))}
         </div>
       )}
 
-      {sostituto || (
+      {(typeof sostituto === 'function' ? sostituto({ scelti, lato: latoReteEff, fascia: FASCIA_RETE[fascia] ?? null }) : sostituto) || (scelti.length >= 2 || affiancati ? (
+        // confronto: un campo per giocatore (stesso evento, stessa scala) e sotto la tabella delle voci di Admin
+        <div>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${lati.length}, 1fr)`, gap: 16 }}>
+            {lati.map((l, i) => {
+              const pts = base.filter(d => latoDi(d) === i && filtroPunti(d))
+              return (
+                <div key={l.label}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', marginBottom: 4 }}>
+                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 17, textTransform: 'uppercase', color: l.colore }}>{l.label}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{pts.length} {etichetta(nomeTipo(tipo)).toLowerCase()}</span>
+                  </div>
+                  <div style={{ position: 'relative' }}>
+                    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 8 }}>
+                      <Campo />
+                      {vista === 'heatmap'
+                        ? <Heatmap punti={pts} colore={l.colore} colonne={GRIGLIE[griglia][0]} righe={GRIGLIE[griglia][1]} />
+                        : [...pts.filter(d => d.attrs?.pericolosa !== 'si'), ...pts.filter(d => d.attrs?.pericolosa === 'si')]
+                            .map((d, k) => <Punto key={k} d={d} colore={l.colore} tipo={tipo} />)}
+                    </svg>
+                    {direzione && <div style={{ ...freccia, right: 8, fontSize: 11, color: direzione.destra.colore }}>{direzione.destra.label} attacca →</div>}
+                    {caricamento && <div style={velo}>Caricamento...</div>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5, marginTop: 14 }}>
+            <thead>
+              <tr>
+                <th style={{ ...thConfronto, textAlign: 'left' }}>{etichetta(nomeTipo(tipo))}</th>
+                {lati.map(l => <th key={l.label} style={{ ...thConfronto, color: l.colore }}>{l.label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {[{ label: 'Totale', filtro: null, blocco: null },
+                ...blocchi.flatMap(b => b.righe.map((c, k) => ({ label: c.label, filtro: c.filtro, blocco: k === 0 && blocchi.length > 0 ? (NOMI_BLOCCHI[b.nome] || etichetta(b.nome)) : null })))]
+                .flatMap(r => {
+                  const v = lati.map((_, i) => conta(i, r.filtro)), max = Math.max(1, ...v)
+                  const on = r.filtro ? scelta && scelta.label === r.label && scelta.nome === r.filtro.nome : !scelta
+                  return [
+                    r.blocco && <tr key={`b${r.label}`}><td colSpan={lati.length + 1} style={{ ...titoloBlocco, paddingTop: 12 }}>{r.blocco}</td></tr>,
+                    <tr key={r.label} onClick={() => setScelta(r.filtro && !on ? { ...r.filtro, label: r.label } : null)}
+                      style={{ cursor: 'pointer', ...(on ? { background: 'rgba(0,229,255,0.06)' } : {}) }}>
+                      <td style={{ ...tdConfronto, textAlign: 'left' }}>{r.label}</td>
+                      {v.map((x, i) => (
+                        <td key={i} style={{ ...tdConfronto, color: lati[i].colore, fontWeight: x === Math.max(...v) && x ? 700 : 400 }}>
+                          {x}<span style={{ display: 'inline-block', height: 7, borderRadius: 4, verticalAlign: 'middle', marginLeft: 8,
+                            width: Math.round(90 * x / max), background: lati[i].colore }} />
+                        </td>
+                      ))}
+                    </tr>,
+                  ]
+                })}
+            </tbody>
+          </table>
+          {conPericolo && (
+            <div onClick={() => setSoloPericolose(x => !x)} style={{ display: 'inline-flex', gap: 10, alignItems: 'center', marginTop: 10, fontSize: 13, cursor: 'pointer' }}>
+              <span>Solo pericolose</span>
+              <span style={{ width: 34, height: 19, borderRadius: 10, background: soloPericolose ? '#F97316' : '#334155', position: 'relative' }}>
+                <span style={{ position: 'absolute', top: 2, left: soloPericolose ? 17 : 2, width: 15, height: 15, borderRadius: '50%', background: 'white' }} />
+              </span>
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+            Un campo per giocatore, stesso evento e stessa scala. Clic su una voce della tabella = solo quei punti in tutti i campi; il valore più alto in grassetto.
+          </div>
+        </div>
+      ) : (
         <div style={{ display: 'grid', gridTemplateColumns: `${W}px minmax(240px, 1fr)`, gap: 20, alignItems: 'start' }}>
           <div>
             <div style={{ position: 'relative' }}>
@@ -156,7 +307,7 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
           {/* pannello: totali, suddivisioni (colonne di Admin), solo pericolose */}
           <div style={pannello}>
             <div style={rigaPannello(false, true)}>
-              <span />{lati.map(l => <span key={l.label} style={{ textAlign: 'right' }}>{l.label.slice(0, 4)}.</span>)}
+              <span />{lati.map(l => <span key={l.label} style={{ textAlign: 'right' }}>{l.corto || `${l.label.slice(0, 4)}.`}</span>)}
             </div>
             <div onClick={() => setScelta(null)} style={rigaPannello(!scelta)}>
               <span>Tutti</span>
@@ -191,7 +342,7 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
             </div>
           </div>
         </div>
-      )}
+      ))}
     </div>
   )
 }
@@ -252,6 +403,13 @@ function Campo() {
   )
 }
 
+const thConfronto = { fontSize: 10.5, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 500,
+  padding: '6px 10px', textAlign: 'right' }
+const tdConfronto = { padding: '7px 10px', textAlign: 'right', borderTop: '1px solid rgba(255,255,255,0.05)' }
+const chipG = { display: 'inline-flex', gap: 6, alignItems: 'center', padding: '4px 10px', borderRadius: 999, fontSize: 12.5,
+  border: '1px solid', background: 'rgba(255,255,255,0.04)', cursor: 'pointer' }
+const selectG = { padding: '4px 8px', borderRadius: 999, fontSize: 12.5, border: '1px dashed rgba(255,255,255,0.25)', background: 'transparent',
+  color: 'var(--text-muted)', cursor: 'pointer' }
 const selettore = { display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', minWidth: 210, padding: '7px 12px',
   borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)', background: 'var(--bg-table, #0B1324)', color: 'var(--text)',
   fontWeight: 600, fontSize: 14, cursor: 'pointer' }
