@@ -5,6 +5,10 @@ import Link from 'next/link'
 import { fetchAPI } from '../../../lib/api'
 import { getUser } from '../../../lib/auth'
 import { useTenant } from '../../../lib/TenantContext'
+import { titoloPunto } from '../../../lib/tempo'
+import SintesiGruppi from '../../../components/SintesiGruppi'
+import CampoAnalisi from '../../../components/CampoAnalisi'
+import { valore } from '../../../lib/sintesi'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
@@ -88,6 +92,20 @@ const RETE_MIN = { tutta: 3, fascia: 2 }
 // fasce di 15' (minuti di gioco), come FASCE_15 nel backend; null = tutta la partita
 const RETE_FASCE = [[null, 'Tutta'], [1, "0-15'"], [2, "15-30'"], [3, "30-45'+"], [4, "45-60'"], [5, "60-75'"], [6, "75-90'+"]]
 
+// sotto-filtri della mappa campo: attributo dell'evento, ordine ed etichette dei valori
+const SOTTOFILTRI = {
+  palla_persa: { attr: 'motivo',
+    ordine: ['passaggio sbagliato', 'lancio sbagliato', 'duello o dribbling perso', 'perso in conduzione o contrasto', 'fallo', 'altro'],
+    etichette: { 'passaggio sbagliato': 'Pass. sbagliati', 'lancio sbagliato': 'Lanci sbagliati',
+      'duello o dribbling perso': 'Duelli/dribbling', 'perso in conduzione o contrasto': 'In conduzione', fallo: 'Falli', altro: 'Altro' } },
+  palla_recuperata: { attr: 'come', ordine: ['intercetto', 'contrasto o duello vinto', 'altro'],
+    etichette: { intercetto: 'Intercetti', 'contrasto o duello vinto': 'Contrasti/duelli', altro: 'Altro' } },
+  cross: { attr: 'origine', ordine: ['azione', 'sviluppo piazzato', 'seconda palla'],
+    etichette: { azione: 'Da azione', 'sviluppo piazzato': 'Sviluppo piazzato', 'seconda palla': 'Seconda palla' } },
+  calcio_piazzato: { attr: 'tipo', ordine: ['angolo', 'punizione', 'rimessa'],
+    etichette: { angolo: 'Angoli', punizione: 'Punizioni', rimessa: 'Rimesse lunghe' } },
+}
+
 function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, matchName }) {
   const [filtroTeam, setFiltroTeam] = useState('tutti')
   const [rete, setRete] = useState(null)
@@ -109,7 +127,19 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, mat
       .catch(() => setRete({ nodi: [], archi: [] }))
   }, [isRete, tenant, matchName, reteTeam, fascia])
 
+  // sotto-filtri: valori di un attributo dell'evento (gli stessi delle colonne della tabella giocatori)
+  // e "solo pericolose" per gli eventi che lo hanno
+  const sotto = SOTTOFILTRI[eventType]
+  const [valore, setValore] = useState(null)
+  const [soloPericolose, setSoloPericolose] = useState(false)
+  useEffect(() => { setValore(null); setSoloPericolose(false) }, [eventType])
+  const conPericolo = data.some(d => d.attrs?.pericolosa)
+  const valori = sotto ? [...new Set(data.map(d => d.attrs?.[sotto.attr]).filter(Boolean))]
+    .sort((a, b) => (sotto.ordine.indexOf(a) + 1 || 99) - (sotto.ordine.indexOf(b) + 1 || 99)) : []
+
   const filtered = data.filter(d => {
+    if (valore && d.attrs?.[sotto.attr] !== valore) return false
+    if (soloPericolose && d.attrs?.pericolosa !== 'si') return false
     if (filtroTeam === 'home') return norm(d.team) === teamAn
     if (filtroTeam === 'away') return norm(d.team) !== teamAn
     return true
@@ -212,14 +242,18 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, mat
       )
     }
 
-    // Altri eventi: cerchio + freccia se presente
+    // Altri eventi: cerchio + freccia se presente; con "pericolosa" (palle perse / recuperate):
+    // pieno, grande e bordato se pericolosa, piccolo e trasparente se no
+    const per = d.attrs?.pericolosa
     return (
       <g key={i}>
         {d.x2 != null && d.y2 != null && (
           <line x1={x} y1={y} x2={sx(d.x2)} y2={sy(d.y2)}
             stroke={col} strokeWidth={1} opacity={0.4} strokeDasharray="3,2" />
         )}
-        <circle cx={x} cy={y} r={6} fill={col} opacity={0.75} />
+        {per === 'si'
+          ? <circle cx={x} cy={y} r={8} fill={col} opacity={0.95} stroke="white" strokeWidth={2} />
+          : <circle cx={x} cy={y} r={per === 'no' ? 4.5 : 6} fill={col} opacity={per === 'no' ? 0.45 : 0.75} />}
       </g>
     )
   }
@@ -464,10 +498,40 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, mat
         </div>
       )}
 
+      {!isRete && (sotto && valori.length > 1 || conPericolo) && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignSelf: 'flex-start' }}>
+          {sotto && valori.length > 1 && [null, ...valori].map(v => (
+            <button key={v || 'tutti'} onClick={() => setValore(v)} style={{
+              padding: '4px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
+              border: `1px solid ${valore === v ? 'var(--primary)' : 'rgba(255,255,255,0.12)'}`,
+              background: valore === v ? 'rgba(0,229,255,0.1)' : 'transparent',
+              color: valore === v ? 'var(--primary)' : '#64748B',
+            }}>{v ? (sotto.etichette[v] || v) : 'Tutti'}</button>
+          ))}
+          {conPericolo && (
+            <button onClick={() => setSoloPericolose(x => !x)} style={{
+              padding: '4px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
+              border: `1px solid ${soloPericolose ? '#F97316' : 'rgba(255,255,255,0.12)'}`,
+              background: soloPericolose ? 'rgba(249,115,22,0.12)' : 'transparent',
+              color: soloPericolose ? '#F97316' : '#64748B',
+            }}>Solo pericolose</button>
+          )}
+        </div>
+      )}
+
+      {sourceFormat === 'veo' && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', width: W, fontSize: 12, fontWeight: 700,
+          fontFamily: 'var(--font-display)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+          {/* Veo: campo girato, la nostra squadra attacca sempre verso destra */}
+          <span style={{ color: nostraInTrasferta ? COLOR_HOME : COLOR_AWAY }}>← {nostraInTrasferta ? teamA : teamB} attacca</span>
+          <span style={{ color: nostraInTrasferta ? COLOR_AWAY : COLOR_HOME }}>{nostraInTrasferta ? teamB : teamA} attacca →</span>
+        </div>
+      )}
+
       <div style={{ borderRadius: 8, overflow: 'hidden', border: '1.5px solid rgba(255,255,255,0.15)', boxShadow: '0 4px 24px rgba(0,0,0,0.5)' }}>
         <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
           {isBalloni ? balloniField : vidswapField}
-          {isRete ? reteSvg : filtered.map((d, i) => marker(d, i))}
+          {isRete ? reteSvg : filtered.map((d, i) => <g key={i}><title>{titoloPunto(d)}</title>{marker(d, i)}</g>)}
         </svg>
       </div>
 
@@ -509,6 +573,14 @@ function MappaCampoV2({ data, eventType, teamA, teamB, sourceFormat, tenant, mat
               <svg width={10} height={10}><circle cx={5} cy={5} r={5} fill={col} /></svg>{label}
             </span>
           ))}
+          {conPericolo && <>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <svg width={18} height={18}><circle cx={9} cy={9} r={7} fill="#888" stroke="white" strokeWidth={2} /></svg>pericolosa (tiro o area entro 15 s)
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <svg width={10} height={10}><circle cx={5} cy={5} r={4.5} fill="#888" opacity={0.45} /></svg>non pericolosa
+            </span>
+          </>}
         </div>
       )}
     </div>
@@ -668,6 +740,13 @@ export default function PartitaPage() {
   const [mappaLoading,     setMappaLoading]     = useState(false)
   const [giocatoriData,    setGiocatoriData]    = useState([])
   const [giocatoriLoaded,  setGiocatoriLoaded]  = useState(false)
+  const [colConfig,        setColConfig]        = useState({})
+
+  // colonne di Admin -> Eventi e statistiche: il pannello del campo usa le stesse
+  useEffect(() => {
+    if (!tenant || !userReady) return
+    fetchAPI(`/v2/analytics/${tenant}/column_config`).then(r => setColConfig(r.config || {})).catch(() => {})
+  }, [tenant, userReady])
 
   useEffect(() => {
     if (!match_name || !userReady) return
@@ -732,16 +811,28 @@ export default function PartitaPage() {
     : [...eventiPresenti].filter(et => ['shot','cross','corner','gkout','freekick'].includes(et)))
   const hasMappaData = tipiEffettivi.length > 0
 
-  const TABS = [
+  // partite Veo: tre tab (sintesi a gruppi, campo con pannello, giocatori); altri formati come prima
+  const isVeo = partita?.source_format === 'veo'
+  const norm = t => (t || '').toLowerCase().trim()
+  const nostraInTrasferta = norm(teamB).includes(norm(tenant).split('_')[0])
+  const TABS = isVeo ? ['sintesi', ...(hasMappaData ? ['campo'] : []), ...(hasGiocatori ? ['giocatori'] : [])] : [
     'sintesi',
     ...(eventiPresenti.has('shot')                                  ? ['tiri']          : []),
     ...(hasMappaData                                                 ? ['mappa campo']   : []),
     ...(eventiPresenti.has('passaggi')                              ? ['passaggi']      : []),
     ...(eventiPresenti.has('cross') || eventiPresenti.has('lanci')  ? ['cross']         : []),
     ...(eventiPresenti.has('calcio_piazzato')                       ? ['calci piazzati'] : []),
-    ...(eventiPresenti.has('duelli') || eventiPresenti.has('dribbling') || eventiPresenti.has('palle recuperate') ? ['duelli'] : []),
+    ...(['duelli', 'duel', 'dribbling', 'palle recuperate', 'palla_recuperata'].some(e => eventiPresenti.has(e)) ? ['duelli'] : []),
     ...(hasGiocatori                                                 ? ['giocatori']     : []),
   ]
+
+  // Palle recuperate / perse e duelli vinti: Veo (palla_recuperata, palla_persa, duel con esito) o
+  // vecchi formati (palle recuperate / duelli senza squadra, con extra per squadra)
+  const recuperate = team => agg('palla_recuperata', team).totale ?? aggNoTeam('palle recuperate').extra?.[`recuperate_${team}`] ?? 0
+  const perse = team => agg('palla_persa', team).totale ?? 0
+  const pericolose = (et, team) => agg(et, team).extra?.pericolose ?? 0
+  const duelliVinti = team => aggNoTeam('duelli').extra?.[`vinti_${team}`] ?? agg('duel', team).completati ?? 0
+  const haPerse = eventiPresenti.has('palla_persa')
 
   // Helper aggregati
   const agg = (eventType, team, period = 'Totale') =>
@@ -809,8 +900,34 @@ export default function PartitaPage() {
         ))}
       </div>
 
+      {/* ── TAB: SINTESI (Veo: a gruppi, clic su una riga -> campo) ── */}
+      {tab === 'sintesi' && isVeo && (
+        <Section title="Sintesi Partita">
+          <SintesiGruppi nomi={[teamA, teamB]} colori={[COLOR_HOME, COLOR_AWAY]}
+            v={(lato, et, k) => valore(agg(et, lato === 0 ? teamA : teamB), k)}
+            onApri={et => { if (tipiEffettivi.includes(et)) { setMappaEventType(et); setTab('campo') } }} />
+        </Section>
+      )}
+
+      {/* ── TAB: CAMPO (Veo): menu degli eventi, squadre, fasce, pannello con le colonne di Admin ── */}
+      {tab === 'campo' && (
+        <Section title="Campo">
+          <CampoAnalisi eventi={mappaData} tipi={tipiEffettivi} tipo={mappaEventType} onTipo={setMappaEventType}
+            nomeTipo={tagLabel} caricamento={mappaLoading} latoNostro={nostraInTrasferta ? 1 : 0}
+            colonne={colConfig[mappaEventType] || []}
+            lati={[{ label: teamA, colore: COLOR_HOME, appartiene: d => norm(d.team) === norm(teamA) },
+                   { label: teamB, colore: COLOR_AWAY, appartiene: d => norm(d.team) !== norm(teamA) }]}
+            direzione={nostraInTrasferta
+              ? { sinistra: { label: teamA, colore: COLOR_HOME }, destra: { label: teamB, colore: COLOR_AWAY } }
+              : { sinistra: { label: teamB, colore: COLOR_AWAY }, destra: { label: teamA, colore: COLOR_HOME } }}
+            sostituto={mappaEventType === 'passaggi'
+              ? <MappaCampoV2 data={mappaData} eventType="passaggi" teamA={teamA} teamB={teamB} sourceFormat={partita?.source_format} tenant={tenant} matchName={match_name} />
+              : null} />
+        </Section>
+      )}
+
       {/* ── TAB: SINTESI ── */}
-      {tab === 'sintesi' && (
+      {tab === 'sintesi' && !isVeo && (
         <Section title="Sintesi Partita">
           <GraficoSpeculare
             teamA={teamA} teamB={teamB}
@@ -826,8 +943,9 @@ export default function PartitaPage() {
               { label: 'Dribbling',      a: agg('dribbling', teamA).totale ?? 0, b: agg('dribbling', teamB).totale ?? 0 },
               { label: 'Falli',          a: agg('disciplina', teamA).extra?.falli ?? 0, b: agg('disciplina', teamB).extra?.falli ?? 0 },
               { label: 'Ammonizioni',    a: agg('disciplina', teamA).extra?.ammonizioni ?? 0, b: agg('disciplina', teamB).extra?.ammonizioni ?? 0 },
-              { label: 'Duelli Vinti',   a: aggNoTeam('duelli').extra?.[`vinti_${teamA}`] ?? 0, b: aggNoTeam('duelli').extra?.[`vinti_${teamB}`] ?? 0 },
-              { label: 'Palle Recup.',   a: aggNoTeam('palle recuperate').extra?.[`recuperate_${teamA}`] ?? 0, b: aggNoTeam('palle recuperate').extra?.[`recuperate_${teamB}`] ?? 0 },
+              { label: 'Duelli Vinti',   a: duelliVinti(teamA), b: duelliVinti(teamB) },
+              { label: 'Palle Recup.',   a: recuperate(teamA), b: recuperate(teamB) },
+              ...(haPerse ? [{ label: 'Palle Perse', a: perse(teamA), b: perse(teamB) }] : []),
             ]}
           />
         </Section>
@@ -1012,12 +1130,17 @@ export default function PartitaPage() {
 
       {/* ── TAB: DUELLI ── */}
       {tab === 'duelli' && (
-        <Section title="Duelli e Palle Recuperate">
+        <Section title="Duelli, Palle Recuperate e Perse">
           <GraficoSpeculare
             teamA={teamA} teamB={teamB}
             rows={[
-              { label: 'Duelli Vinti',     a: aggNoTeam('duelli').extra?.[`vinti_${teamA}`] ?? 0,          b: aggNoTeam('duelli').extra?.[`vinti_${teamB}`] ?? 0 },
-              { label: 'Palle Recuperate', a: aggNoTeam('palle recuperate').extra?.[`recuperate_${teamA}`] ?? 0, b: aggNoTeam('palle recuperate').extra?.[`recuperate_${teamB}`] ?? 0 },
+              { label: 'Duelli Vinti',     a: duelliVinti(teamA), b: duelliVinti(teamB) },
+              { label: 'Palle Recuperate', a: recuperate(teamA),  b: recuperate(teamB) },
+              ...(haPerse ? [
+                { label: 'Recup. pericolose', a: pericolose('palla_recuperata', teamA), b: pericolose('palla_recuperata', teamB) },
+                { label: 'Palle Perse',       a: perse(teamA), b: perse(teamB) },
+                { label: 'Perse pericolose',  a: pericolose('palla_persa', teamA), b: pericolose('palla_persa', teamB) },
+              ] : []),
               { label: 'Dribbling',        a: agg('dribbling', teamA).totale ?? 0,                          b: agg('dribbling', teamB).totale ?? 0 },
               { label: 'Drib. Riusciti',   a: agg('dribbling', teamA).completati ?? 0,                      b: agg('dribbling', teamB).completati ?? 0 },
             ]}
@@ -1025,15 +1148,14 @@ export default function PartitaPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1.5rem' }}>
             {[teamA, teamB].map((team, i) => {
               const color = i === 0 ? COLOR_HOME : COLOR_AWAY
-              const duelli = aggNoTeam('duelli')
-              const pallRec = aggNoTeam('palle recuperate')
               const dribb = agg('dribbling', team)
               return (
                 <div key={team}>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 700, color, marginBottom: '0.75rem' }}>{team}</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                    <StatBox label="Duelli Vinti"   value={duelli.extra?.[`vinti_${team}`] ?? 0}      color={color} />
-                    <StatBox label="Palle Recup."   value={pallRec.extra?.[`recuperate_${team}`] ?? 0} color={color} />
+                    <StatBox label="Duelli Vinti"   value={duelliVinti(team)}                          color={color} />
+                    <StatBox label="Palle Recup."   value={recuperate(team)}                           color={color} />
+                    {haPerse && <StatBox label="Palle Perse" value={perse(team)}                       color={color} />}
                     <StatBox label="Dribbling"      value={dribb.totale     ?? 0}                      color={color} />
                     <StatBox label="Drib. Riusciti" value={dribb.completati ?? 0}                      color={color} />
                     <StatBox label="Drib. %"        value={dribb.percentuale ? dribb.percentuale + '%' : '0%'} color={color} />

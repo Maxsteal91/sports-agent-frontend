@@ -6,6 +6,7 @@ import { getUser } from '../lib/auth'
 import { useTenant } from '../lib/TenantContext'
 import KpiCard from '../components/KpiCard'
 import MappaStatistica from '../components/MappaStatistica'
+import SquadraVeo from '../components/SquadraVeo'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 const BAR_COLORS = {
@@ -182,6 +183,13 @@ export default function SquadraPage() {
     away_specchio: `${compLabel} Avversario`,
     away_altri:    `Altri Avversario`,
   }
+
+  // tenant con partite Veo: sezione a tre tab come la partita (sintesi stagione, campo, andamento)
+  if (partite.length && partite.every(p => p.source_format === 'veo') && tenantTeam) return (
+    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
+      <SquadraVeo tenant={tenant} categoria={categoria} partite={partite} noi={tenantTeam} />
+    </div>
+  )
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>

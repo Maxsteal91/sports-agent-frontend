@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { fetchAPI } from '../lib/api'
 import { useTenant } from '../lib/TenantContext'
+import { titoloPunto } from '../lib/tempo'
 
 const RUOLO_COLOR = { POR: '#F59E0B', DIF: '#3B82F6', CEN: '#10B981', ATT: '#EF4444' }
 
@@ -67,7 +68,7 @@ function MiniPitch({ events, eventType }) {
             stroke={color}
             strokeWidth={1.8}
             opacity={0.85}
-          />
+          ><title>{titoloPunto(e)}</title></circle>
         )
       })}
 

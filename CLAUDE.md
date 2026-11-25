@@ -46,7 +46,12 @@ La navbar (`app/layout.js`) mostra:
 
 **`/login`** — Form email/password. Nessuna navbar.
 
-**`/`** (Squadra) — Homepage con navigazione piatta in una singola riga di pillole:
+**`/`** (Squadra) — **Tenant con partite tutte Veo** (`mazzola_pro`): `components/SquadraVeo.js`. In alto risultati (partite, V·N·P, gol fatti·subiti, punti) e la striscia delle partite (risultato colorato, "@" = trasferta, data `01/nov/26`, clic → partita). Filtro **Tutte / Casa / Trasferta / Ultime 5** valido per i tre tab:
+- **Sintesi stagione**: `SintesiGruppi` (gruppi Attacco / Possesso / Difesa, noi contro avversari, totale e media a partita, "di cui"; ammonizioni escluse perché mancano per gli avversari); dati `aggregati?tutti=true`; clic su una riga → Campo su quell'evento.
+- **Campo**: `CampoAnalisi` con i punti della stagione (`mappa_stagione`), noi a destra.
+- **Andamento**: l'evento scelto partita per partita; voci = colonne di Admin contate dal backend (`conteggi`); selettore noi / avversari; clic su una colonna = quella voce nel grafico; riga Totale.
+
+**Altri tenant** (Balloni, VidSwap) — Homepage com'era, con navigazione piatta in una singola riga di pillole:
 - **TIRI | GOL | CROSS | CALCI PIAZZATI | USCITE** (pillole cyan) → mostrano la mappa eventi cumulativa stagione. Componente: `MappaStatistica`. GOL è derivato client-side dai tiri (outcome='gol'), gli altri chiamano `mappa_stagione?event_type=<tipo>`. Cache interna per tipo — cambio tipo non ri-scarica se già fetched. CALCI PIAZZATI = `calcio_piazzato` (fallback `freekick` se vuoto), filtro Tutti / Angoli / Punizioni / Rimesse lunghe.
 - **CONFRONTO** (pillola arancione, separatore visivo) → bar chart noi vs avversario per ogni tipo evento + tabella dettaglio. Barre stackate (porzione piena = nello specchio/completati, trasparente = altri). `compLabel` dinamico: `'Nello specchio'` per `shot`, `'Completati'` per altri.
 
@@ -56,7 +61,7 @@ KPI stagione (partite, tiri, goal, nello specchio, % specchio) sempre visibili i
 
 **`/partite`** — Lista partite con data, squadre, risultato (goal calcolati dagli aggregati), categoria. Filtro per data asc/desc. Bottone Dettaglio per ogni partita.
 
-**`/partita/[match_name]`** — Dettaglio partita (tab: sintesi, tiri, mappa campo, passaggi, cross, calci piazzati, duelli). Tab **cross**: divisi per origine (da azione / sviluppo piazzato / seconda palla), righe lanci solo se presenti; tab **calci piazzati**: angoli, punizioni, rimesse lunghe (battuta, esito, tiro). Tab Giocatori: colonne da `column_config` + `tagVisibili`/`tagLabel`, righe con chiave `team-player`. Legge `?tenant=` da `useSearchParams`. `source_format` `balloni` e `veo` = campo intero orizzontale (`isBalloni`), VidSwap = mezzo campo verticale.
+**`/partita/[match_name]`** — **Partite Veo** (`source_format === 'veo'`): tre tab **Sintesi** (`SintesiGruppi`, clic su una riga → Campo), **Campo** (`CampoAnalisi`; per i passaggi la rete dei passaggi di `MappaCampoV2`), **Giocatori**. **Altri formati**: dettaglio partita (tab: sintesi, tiri, mappa campo, passaggi, cross, calci piazzati, duelli). Tab **cross**: divisi per origine (da azione / sviluppo piazzato / seconda palla), righe lanci solo se presenti; tab **calci piazzati**: angoli, punizioni, rimesse lunghe (battuta, esito, tiro). Tab Giocatori: colonne da `column_config` + `tagVisibili`/`tagLabel`, righe con chiave `team-player`. Legge `?tenant=` da `useSearchParams`. `source_format` `balloni` e `veo` = campo intero orizzontale (`isBalloni`), VidSwap = mezzo campo verticale.
 - **Giocatori** (`GiocatoriTab`): stessa `column_config` della pagina Giocatori (colonne, etichette, ordine), tipi e nomi da `tagVisibili` / `tagLabel`; vista Performance solo per la nostra squadra (riga = squadra + giocatore).
 - **Mappa campo → Passaggi**: al posto dei punti la **rete dei passaggi** (`GET rete_passaggi`), una squadra alla volta (default la squadra del tenant): pallino = posizione media col pallone, grandezza relativa alla vista (numero giallo = passaggi), frecce ≥ `RETE_MIN` passaggi riusciti (3 su tutta la partita, 2 nelle fasce; numero sulla freccia solo nelle fasce di 15'), linee sottili sotto soglia, subentrati tratteggiati, etichetta = cognome, tabellina sotto. Filtro **Tutta / 0-15' … 75-90'+** (`RETE_FASCE`).
 
@@ -110,6 +115,11 @@ Il campo `player` nella risposta è già il nome completo (o il numero se la ros
 
 ## Shared components (`components/`)
 
+- **`CampoAnalisi.js`** (partita e stagione, dati Veo): menu degli eventi a gruppi (`GRUPPI_EVENTI` in `lib/sintesi.js`), Entrambe / una squadra, fasce (tutta, 1°/2° tempo, ogni 15'), verso d'attacco nel campo, **Punti / Heatmap** (heatmap una squadra alla volta, la nostra di default; **40 zone** 8×5 o **18 zone** 6×3, numero nel tassello), pallino grande bordato = pericolosa, ★ = gol. Pannello a destra = colonne visibili di Admin per l'evento, raggruppate per attributo (campo `filtro` di `column_config`): totali per squadra, clic = filtra i punti; "Solo pericolose". Conta solo eventi con posizione (nota nel pannello). Tooltip con `lib/tempo.js` (minuto, numero, "video N · mm:ss").
+- **`SintesiGruppi.js`**: sintesi a gruppi a due lati, righe in `GRUPPI_SINTESI` (`lib/sintesi.js`), media a partita per la stagione.
+- **`SquadraVeo.js`**: sezione Squadra dei tenant Veo (vedi Routes).
+- `lib/sintesi.js`: gruppi della sintesi e degli eventi, `valore`, `sommaRighe`, `etichetta` ("palle_Perse" → "Palle perse").
+
 - `KpiCard` — card metrica singola
 - `EventiChart` — Recharts bar chart
 - `MappaTiri` — shot map (usato nel dettaglio partita)
@@ -122,3 +132,5 @@ CSS variables in `app/globals.css`. Token principali: `--primary` (#00E5FF cyan)
 ## Deployment
 
 Frontend su Railway (account Maxsteal91), autodeploy da branch `main`. Git workflow: sviluppo su `development`, merge in `main` per deploy.
+
+Ultimo rilascio: 23/11/2026 (schede cross e calci piazzati, pillola CALCI PIAZZATI, riepilogo passaggi del giocatore). Rilascio successivo (novembre 2026): partita e squadra Veo a tre tab (sintesi a gruppi, campo con pannello e heatmap, andamento), tempo del video nei tooltip, palle perse e recuperate. Dopo un deploy che cambia i dati Veo il tenant `mazzola_pro` va ricaricato dal backend (vedi CLAUDE.md del backend). Per verificare il deploy guardare sul sito una novità visibile, con ricarica forzata (Cmd+Shift+R).

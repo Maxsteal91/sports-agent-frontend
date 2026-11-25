@@ -1,6 +1,7 @@
 'use client'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { fetchAPI } from '../lib/api'
+import { titoloPunto } from '../lib/tempo'
 
 // ── SVG canvas
 const W = 1000
@@ -147,14 +148,14 @@ function FieldSVG({ ourShots, theirShots, ourLabel }) {
           cx={fx(s.x)} cy={fy(s.y)} r="5"
           fill={CYAN} opacity="0.7"
           stroke="rgba(0,0,0,0.35)" strokeWidth="0.8"
-        />
+        ><title>{titoloPunto(s)}</title></circle>
       ))}
       {theirShots.map((s, i) => (
         <circle key={`their-${i}`}
           cx={fx(s.x)} cy={fy(s.y)} r="5"
           fill={PURPLE} opacity="0.7"
           stroke="rgba(0,0,0,0.35)" strokeWidth="0.8"
-        />
+        ><title>{titoloPunto(s)}</title></circle>
       ))}
 
       <text x={fx(15)} y={fy(95)} textAnchor="middle" fontSize="18" fontWeight="700"
