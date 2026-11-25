@@ -14,7 +14,7 @@ import { GRUPPI_EVENTI, etichetta, percento } from '../lib/sintesi'
 //             Campo (tutti i suoi eventi della stagione), Andamento (partita per partita)
 //   confronto un campo per giocatore (stesso evento, stessa scala) e la tabella delle voci
 // I numeri: /giocatori (eventi), /conteggi?giocatore= (per partita), /mappa_stagione?player= (punti).
-const NOI = '#00E5FF', COLORI = ['#00E5FF', '#F59E0B', '#22C55E']
+const NOI = '#00E5FF', COLORI = ['#FFFFFF', '#FDE047', '#4ADE80']   // colori per riconoscere i giocatori nel confronto (i punti restano azzurri)
 const RUOLO = { POR: '#EAB308', DIF: '#3B82F6', CEN: '#22C55E', ATT: '#EF4444' }
 const ORDINE_RUOLO = { POR: 0, DIF: 1, CEN: 2, ATT: 3 }
 const FILTRI = [['tutte', 'Tutte'], ['casa', 'Casa'], ['trasferta', 'Trasferta'], ['ultime5', 'Ultime 5']]
@@ -271,7 +271,7 @@ function CampoGiocatori({ gg, tipo, setTipo, tipi, tenant, catParam, scelte, col
     <CampoAnalisi eventi={punti.filter(d => nomiPartite.has(d.match_name))} tipi={tipi} tipo={tipo} onTipo={setTipo}
       nomeTipo={tagLabel} caricamento={carica} colonne={colonne(tipo).length ? colonne(tipo) : []}
       affiancati={gg.length >= 2}
-      lati={gg.map((g, i) => ({ label: cognome(g.player), corto: cognome(g.player), colore: gg.length === 1 ? NOI : COLORI[i], appartiene: d => d._g === i }))}
+      lati={gg.map((g, i) => ({ label: cognome(g.player), corto: cognome(g.player), colore: NOI, tinta: gg.length === 1 ? NOI : COLORI[i], appartiene: d => d._g === i }))}
       direzione={{ sinistra: { label: 'Avversari', colore: '#CC44FF' }, destra: { label: noi, colore: NOI } }} />
   )
 }

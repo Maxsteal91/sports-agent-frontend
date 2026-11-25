@@ -27,7 +27,10 @@ const sx = x => PAD + (x / 100) * FW, sy = y => PAD + (y / 100) * FH
 //   giocatori [{numero, nome, lato}] per il filtro giocatori (partita); giocatoriIniziali = scelti all'apertura
 //   (es. dalla scheda del giocatore). Con giocatori scelti (al massimo 3) le colonne del pannello e i colori
 //   della mappa sono i giocatori al posto delle squadre: uno = i suoi eventi, due o tre = confronto
-const COLORI_GIOCATORI = ['#00E5FF', '#F59E0B', '#22C55E']
+// colori per RICONOSCERE i giocatori scelti (chip, striscia, titoli, tabella): mai quelli delle squadre.
+// I punti e le heatmap restano nel colore della squadra (colore); tinta = colore del giocatore
+const COLORI_GIOCATORI = ['#FFFFFF', '#FDE047', '#4ADE80']
+const tinta = l => l?.tinta || l?.colore
 export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lati: latiSquadre, colonne = [], direzione,
                                       filtriExtra, sostituto, caricamento, latoNostro = 0, giocatori, giocatoriIniziali,
                                       affiancati = false }) {
@@ -36,7 +39,7 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
   useEffect(() => { setScelti(giocatoriIniziali || []); setLato(null) }, [JSON.stringify(giocatoriIniziali || [])])
   const lati = scelti.length ? scelti.map((g, i) => ({
     label: `${g.numero} ${(g.nome || '').split(' ')[0]}`, corto: `${g.numero} ${(g.nome || '').split(' ')[0].slice(0, 5)}`,
-    colore: scelti.length === 1 ? latiSquadre[g.lato].colore : COLORI_GIOCATORI[i],
+    colore: latiSquadre[g.lato].colore, tinta: scelti.length === 1 ? latiSquadre[g.lato].colore : COLORI_GIOCATORI[i],
     appartiene: d => String(d.player) === String(g.numero) && latiSquadre[g.lato].appartiene(d),
   })) : latiSquadre
   const [lato, setLato] = useState(null)          // null = entrambi (tutti i giocatori scelti)
@@ -125,7 +128,7 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
             </div>
           )}
         </div>}
-        {sostituto && (
+        {sostituto && !scelti.length && (
           <div style={segmento}>
             {latiSquadre.map((l, i) => (
               <div key={l.label} onClick={() => { setLatoRete(i); setScelti(scelti.filter(g => g.lato === i)) }}
@@ -166,7 +169,7 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Giocatori:</span>
           {scelti.map((g, i) => (
-            <span key={`${g.lato}|${g.numero}`} onClick={() => togli(i)} title="Togli" style={{ ...chipG, borderColor: lati[i].colore, color: lati[i].colore }}>
+            <span key={`${g.lato}|${g.numero}`} onClick={() => togli(i)} title="Togli" style={{ ...chipG, borderColor: tinta(lati[i]), color: tinta(lati[i]) }}>
               {g.numero} {g.nome} ✕
             </span>
           ))}
@@ -192,7 +195,7 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
               <span key={et} onClick={() => onTipo(et)} title="Vedi sul campo"
                 style={{ ...chip, display: 'inline-flex', gap: 6, alignItems: 'center', ...(et === tipo ? chipAttivo : {}) }}>
                 {etichetta(nomeTipo(et))}
-                {totScelti.map((t, i) => <b key={i} style={{ color: lati[i]?.colore }}>{t[et] || 0}</b>)
+                {totScelti.map((t, i) => <b key={i} style={{ color: tinta(lati[i]) }}>{t[et] || 0}</b>)
                   .reduce((acc, el, i) => i ? [...acc, <span key={`s${i}`} style={{ color: 'var(--text-muted)' }}>·</span>, el] : [el], [])}
               </span>
             ))}
@@ -216,7 +219,7 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
               return (
                 <div key={l.label}>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', marginBottom: 4 }}>
-                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 17, textTransform: 'uppercase', color: l.colore }}>{l.label}</span>
+                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 17, textTransform: 'uppercase', color: tinta(l) }}>{l.label}</span>
                     <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{pts.length} {etichetta(nomeTipo(tipo)).toLowerCase()}</span>
                   </div>
                   <div style={{ position: 'relative' }}>
@@ -237,7 +240,7 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
             <thead>
               <tr>
                 <th style={{ ...thConfronto, textAlign: 'left' }}>{etichetta(nomeTipo(tipo))}</th>
-                {lati.map(l => <th key={l.label} style={{ ...thConfronto, color: l.colore }}>{l.label}</th>)}
+                {lati.map(l => <th key={l.label} style={{ ...thConfronto, color: tinta(l) }}>{l.label}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -252,9 +255,9 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
                       style={{ cursor: 'pointer', ...(on ? { background: 'rgba(0,229,255,0.06)' } : {}) }}>
                       <td style={{ ...tdConfronto, textAlign: 'left' }}>{r.label}</td>
                       {v.map((x, i) => (
-                        <td key={i} style={{ ...tdConfronto, color: lati[i].colore, fontWeight: x === Math.max(...v) && x ? 700 : 400 }}>
+                        <td key={i} style={{ ...tdConfronto, color: tinta(lati[i]), fontWeight: x === Math.max(...v) && x ? 700 : 400 }}>
                           {x}<span style={{ display: 'inline-block', height: 7, borderRadius: 4, verticalAlign: 'middle', marginLeft: 8,
-                            width: Math.round(90 * x / max), background: lati[i].colore }} />
+                            width: Math.round(90 * x / max), background: tinta(lati[i]) }} />
                         </td>
                       ))}
                     </tr>,
@@ -307,7 +310,7 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
             </div>
             <div onClick={() => setScelta(null)} style={rigaPannello(!scelta)}>
               <span>Tutti</span>
-              {lati.map((l, i) => <span key={i} style={{ textAlign: 'right', color: l.colore, fontWeight: 600 }}>{conta(i, null)}</span>)}
+              {lati.map((l, i) => <span key={i} style={{ textAlign: 'right', color: tinta(l), fontWeight: 600 }}>{conta(i, null)}</span>)}
             </div>
             {blocchi.map(b => (
               <div key={b.nome} style={{ marginTop: 6 }}>
@@ -317,7 +320,7 @@ export default function CampoAnalisi({ eventi, tipi, tipo, onTipo, nomeTipo, lat
                   return (
                     <div key={c.label} onClick={() => setScelta(on ? null : { ...c.filtro, label: c.label })} style={rigaPannello(on)}>
                       <span>{c.label}</span>
-                      {lati.map((l, i) => <span key={i} style={{ textAlign: 'right', color: l.colore, fontWeight: 600 }}>{conta(i, c.filtro)}</span>)}
+                      {lati.map((l, i) => <span key={i} style={{ textAlign: 'right', color: tinta(l), fontWeight: 600 }}>{conta(i, c.filtro)}</span>)}
                     </div>
                   )
                 })}
